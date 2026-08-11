@@ -8,6 +8,7 @@ import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { API_PREFIX } from "./shared/index.js";
 import { startStaleOrderNotifier } from "./services/staleOrderNotifier.js";
+import { startKeepAlive } from "./services/keepAlive.js";
 
 // Routes
 import authRoutes          from "./modules/auth/auth.routes.js";
@@ -192,6 +193,7 @@ app.listen(env.PORT, "0.0.0.0", () => {
   console.log(`   Environnement : ${env.NODE_ENV}`);
   console.log(`   API : ${host}${API_PREFIX}`);
   startStaleOrderNotifier();
+  if (env.NODE_ENV === "production") startKeepAlive();
 });
 
 export default app as Application;
