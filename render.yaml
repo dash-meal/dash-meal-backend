@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: dash-meal-backend
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    startCommand: pnpm run start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: AT_API_KEY
+        sync: false
+      - key: AT_USERNAME
+        sync: false
+      - key: AT_SENDER_ID
+        sync: false
+      - key: OTP_EXPOSE_CODE
+        value: false
+      - key: OTP_LOG_CODES
+        value: false
+      - key: CAMPAY_APP_USERNAME
+        sync: false
+      - key: CAMPAY_APP_PASSWORD
+        sync: false
+      - key: CAMPAY_BASE_URL
+        sync: false
+      - key: CAMPAY_CALLBACK_URL
+        sync: false
+      - key: CAMPAY_WEBHOOK_SECRET
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: EXPO_ACCESS_TOKEN
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: STORAGE_BUCKET_PRODUCTS
+        value: product-images
+      - key: STORAGE_BUCKET_DOCUMENTS
+        value: brand-documents
+      - key: STORAGE_BUCKET_INVOICES
+        value: invoices
+      - key: STORAGE_BUCKET_ADS
+        value: ad-images
