@@ -5,6 +5,12 @@ import { supabase } from "../config/supabase.js";
 
 type SendEmailResult = { ok: boolean; id?: string };
 
+// Adresses dédiées sur le domaine dash-meal.com (vérifié chez Resend).
+export const FROM_OTP = "otp@dash-meal.com";
+export const FROM_SUPPORT = "support@dash-meal.com";
+// Réservée pour un futur module RH, pas encore utilisée par un flux d'envoi.
+export const FROM_HR = "hr@dash-meal.com";
+
 let resendClient: Resend | null = null;
 
 function getResendClient(): Resend | null {
@@ -18,6 +24,7 @@ async function sendEmail(params: {
   subject: string;
   html: string;
   text: string;
+  from?: string;
 }): Promise<SendEmailResult> {
   const client = getResendClient();
 
@@ -28,7 +35,7 @@ async function sendEmail(params: {
 
   try {
     const { data, error } = await client.emails.send({
-      from: env.RESEND_FROM_EMAIL,
+      from: params.from ?? env.RESEND_FROM_EMAIL,
       to: params.to,
       subject: params.subject,
       html: params.html,
@@ -70,6 +77,7 @@ export async function sendCodeByEmail(email: string, code: string): Promise<{ em
     subject: "Code OTP Dash Meal",
     html: `<p>Votre code OTP Dash Meal est :</p><h2>${code}</h2><p>Valable ${OTP_EXPIRES_IN_MINUTES} minutes.</p>`,
     text: `Votre code OTP Dash Meal est: ${code}. Valable ${OTP_EXPIRES_IN_MINUTES} minutes.`,
+    from: FROM_OTP,
   });
 
   return { emailSent: result.ok };

@@ -62,7 +62,7 @@ const EnvSchema = z.object({
   GOOGLE_MAPS_API_KEY: z.string().min(1),
   EXPO_ACCESS_TOKEN: z.string().optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
-  RESEND_FROM_EMAIL: z.string().email().default("noreply@dash-meal.com"),
+  RESEND_FROM_EMAIL: z.string().email().default("support@dash-meal.com"),
 
   STORAGE_BUCKET_PRODUCTS: z.string().default("product-images"),
   STORAGE_BUCKET_DOCUMENTS: z.string().default("brand-documents"),
