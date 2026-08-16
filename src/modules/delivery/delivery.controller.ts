@@ -327,16 +327,6 @@ export async function updateDeliveryStatus(req: Request, res: Response, next: Ne
       }
     }
 
-    // Mettre à jour les stats du livreur
-    if (status === "delivered" && delivery.driver_id) {
-      await supabase.from("drivers")
-        .update({ total_deliveries: supabase.rpc as any }) // handled via raw increment below
-        .eq("id", delivery.driver_id);
-      // Incrément simple
-      const { data: drv } = await supabase.from("drivers").select("total_deliveries").eq("id", delivery.driver_id).single();
-      await supabase.from("drivers").update({ total_deliveries: (drv?.total_deliveries ?? 0) + 1 }).eq("id", delivery.driver_id);
-    }
-
     // Mettre à jour la position du livreur dans drivers
     const { lat, lng } = req.body as { lat?: number; lng?: number };
     if (delivery.driver_id && lat != null && lng != null) {
