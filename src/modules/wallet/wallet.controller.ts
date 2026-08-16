@@ -135,7 +135,8 @@ export async function requestWithdrawal(req: Request, res: Response, next: NextF
       campayRef = campayRes.reference;
     } catch (campayErr: any) {
       if (campayErr instanceof AppError) throw campayErr;
-      throw new AppError(502, "CAMPAY_ERROR", campayErr?.message ?? "Échec du virement Campay");
+      console.error("[requestWithdrawal] Erreur virement:", campayErr);
+      throw new AppError(502, "CAMPAY_ERROR", "Une erreur est survenue, veuillez contacter le support.");
     }
 
     const { data: txnId, error: rpcErr } = await supabase.rpc("process_branch_withdrawal", {
@@ -216,7 +217,8 @@ export async function platformWithdraw(req: Request, res: Response, next: NextFu
       campayRef = campayRes.reference;
     } catch (campayErr: any) {
       if (campayErr instanceof AppError) throw campayErr;
-      throw new AppError(502, "CAMPAY_ERROR", campayErr?.message ?? "Échec du virement Campay");
+      console.error("[requestPlatformWithdrawal] Erreur virement:", campayErr);
+      throw new AppError(502, "CAMPAY_ERROR", "Une erreur est survenue, veuillez contacter le support.");
     }
 
     const { error } = await supabase.rpc("process_platform_withdrawal", {

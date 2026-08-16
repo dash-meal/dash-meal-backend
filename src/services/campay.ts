@@ -75,6 +75,10 @@ function detectOperator(phone: string): "MTN" | "Orange" | "unknown" {
   return "unknown";
 }
 
+// Message générique renvoyé au client — jamais le détail brut du prestataire
+// (ni son nom) dans une réponse visible par l'utilisateur final.
+const GENERIC_PROVIDER_ERROR = "Une erreur est survenue, veuillez contacter le support.";
+
 const CAMPAY_MIN_AMOUNT: Record<"MTN" | "Orange" | "unknown", number> = {
   MTN:     100, // MTN Mobile Money minimum
   Orange:   10, // Orange Money minimum
@@ -218,16 +222,8 @@ export async function campayCollect(params: {
 
   if (!res.ok) {
     const body = await res.text();
-    try {
-      const errJson = JSON.parse(body) as { message?: string; error_code?: string };
-      if (errJson.message) {
-        throw new AppError(400, "CAMPAY_ERROR", errJson.message);
-      }
-    } catch (parseErr) {
-      if (parseErr instanceof SyntaxError) { /* corps non-JSON */ }
-      else throw parseErr;
-    }
-    throw new AppError(502, "CAMPAY_ERROR", `Échec du paiement Mobile Money (${res.status})`);
+    console.error(`[Campay collect] status=${res.status} body=${body}`);
+    throw new AppError(502, "CAMPAY_ERROR", GENERIC_PROVIDER_ERROR);
   }
 
   return res.json() as Promise<CamPayCollectResponse>;
@@ -301,15 +297,8 @@ export async function campayWithdraw(params: {
 
   if (!res.ok) {
     const raw = await res.text();
-    // Essayer de parser le message d'erreur JSON de Campay
-    try {
-      const errJson = JSON.parse(raw) as { message?: string; detail?: string; error?: string };
-      const msg = errJson.message ?? errJson.detail ?? errJson.error ?? raw;
-      throw new AppError(502, "CAMPAY_WITHDRAW_ERROR", `Campay : ${msg}`);
-    } catch (e) {
-      if (e instanceof AppError) throw e;
-    }
-    throw new AppError(502, "CAMPAY_WITHDRAW_ERROR", `Échec du virement Campay (${res.status})`);
+    console.error(`[Campay withdraw] status=${res.status} body=${raw}`);
+    throw new AppError(502, "CAMPAY_WITHDRAW_ERROR", GENERIC_PROVIDER_ERROR);
   }
 
   return res.json() as Promise<CamPayWithdrawResponse>;
@@ -339,9 +328,7 @@ export async function campayGetSubscriberName(phone: string): Promise<{
   if (!res.ok) {
     // Endpoint non supporté par ce compte Campay → traiter comme non disponible
     if (res.status === 404 || res.status === 403) return null;
-    let msg = raw;
-    try { msg = (JSON.parse(raw) as any)?.message ?? raw; } catch { /* noop */ }
-    throw new AppError(502, "CAMPAY_ERROR", `Campay get-name : ${msg}`);
+    throw new AppError(502, "CAMPAY_ERROR", GENERIC_PROVIDER_ERROR);
   }
 
   let data: Record<string, unknown>;
