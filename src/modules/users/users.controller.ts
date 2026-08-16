@@ -383,6 +383,16 @@ export async function getUserById(req: Request, res: Response, next: NextFunctio
   }
 }
 
+// ─── Archivage du compte par l'utilisateur lui-même ──────────────────────────
+export async function archiveMyAccount(req: Request, res: Response, next: NextFunction) {
+  try {
+    await supabase.from("users").update({ is_active: false }).eq("id", req.user!.id);
+    sendSuccess(res, null, "Compte archivé");
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function toggleUserActive(req: Request, res: Response, next: NextFunction) {
   try {
     const { data: user } = await supabase

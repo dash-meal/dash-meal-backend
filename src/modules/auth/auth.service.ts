@@ -200,7 +200,7 @@ export async function loginUser(input: { identifier?: string; email?: string; ph
 
   let query = supabase
     .from("users")
-    .select("id, name, phone, email, password_hash, is_verified");
+    .select("id, name, phone, email, password_hash, is_verified, is_active");
   query = isEmail
     ? query.eq("email", identifier.toLowerCase())
     : query.eq("phone", identifier);
@@ -209,6 +209,10 @@ export async function loginUser(input: { identifier?: string; email?: string; ph
 
   if (!user) {
     throw new AppError(401, "INVALID_CREDENTIALS", "Identifiants incorrects");
+  }
+
+  if (!user.is_active) {
+    throw new AppError(403, "ACCOUNT_ARCHIVED", "Ce compte a été archivé");
   }
 
   if (!user.is_verified) {
@@ -396,9 +400,12 @@ export async function refreshTokens(refreshToken: string): Promise<AuthTokens> {
   if (payload.role === "user") {
     const { data } = await supabase
       .from("users")
-      .select("id, name, phone, is_verified")
+      .select("id, name, phone, is_verified, is_active")
       .eq("id", payload.id)
       .single();
+    if (data && !data.is_active) {
+      throw new AppError(403, "ACCOUNT_ARCHIVED", "Ce compte a été archivé");
+    }
     user = data;
   } else if (payload.role === "driver") {
     const { data } = await supabase

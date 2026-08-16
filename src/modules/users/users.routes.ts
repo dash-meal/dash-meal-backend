@@ -44,6 +44,7 @@ router.patch("/me", authenticate, requireRole("user"), validate(UpdateProfileSch
 router.post("/me/change-password", authenticate, requireRole("user"), validate(ChangePasswordSchema), controller.changePassword);
 router.post("/me/avatar", authenticate, requireRole("user"), avatarUpload.single("avatar"), controller.uploadAvatar);
 router.patch("/me/default-payment", authenticate, requireRole("user"), validate(z.object({ phone: z.string().min(8), method: z.enum(["orange_money", "mtn_mobile_money"]) })), controller.updateDefaultPayment);
+router.delete("/me", authenticate, requireRole("user"), controller.archiveMyAccount);
 
 // ─── Favoris agences ─────────────────────────────────────────────────────────
 router.get("/me/favorites", authenticate, requireRole("user"), controller.getFavorites);
