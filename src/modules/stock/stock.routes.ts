@@ -25,6 +25,7 @@ const BulkSchema = z.object({
 router.get( "/:branch_id",                     controller.getBranchStock);
 router.get( "/:branch_id/movements",           controller.getStockMovements);
 router.get( "/:branch_id/alerts",              controller.getStockAlerts);
+router.get( "/:branch_id/by-barcode/:code",    controller.getStockByBarcode);
 router.post("/:branch_id/bulk",                validate(BulkSchema),   controller.bulkUpdateStock);
 router.patch("/:branch_id/:product_id",        validate(UpdateSchema),  controller.updateStockItem);
 

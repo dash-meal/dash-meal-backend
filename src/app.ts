@@ -17,6 +17,7 @@ import branchManagersRoutes from "./modules/branch-managers/branch-managers.rout
 import driverWalletRoutes  from "./modules/driver-wallet/driver-wallet.routes.js";
 import branchHoursRoutes   from "./modules/branch-hours/branch-hours.routes.js";
 import stockRoutes         from "./modules/stock/stock.routes.js";
+import branchVerticalsRoutes from "./modules/branch-verticals/branch-verticals.routes.js";
 import brandsRoutes from "./modules/brands/brands.routes.js";
 import branchesRoutes from "./modules/branches/branches.routes.js";
 import productsRoutes from "./modules/products/products.routes.js";
@@ -46,7 +47,6 @@ import favoritesRoutes from "./modules/favorites/favorites.routes.js";
 import trackingRoutes from "./modules/tracking/tracking.routes.js";
 import groupOrdersRoutes from "./modules/group-orders/group-orders.routes.js";
 import driverRoutes from "./modules/driver/driver.routes.js";
-import reelsRoutes       from "./modules/reels/reels.routes.js";
 import promoCodesRoutes  from "./modules/promo-codes/promo-codes.routes.js";
 import userWalletRoutes  from "./modules/user-wallet/user-wallet.routes.js";
 
@@ -141,6 +141,7 @@ app.use(`${API_PREFIX}/branch-managers`,  branchManagersRoutes);
 app.use(`${API_PREFIX}/driver-wallet`,    driverWalletRoutes);
 app.use(`${API_PREFIX}/branch-hours`,     branchHoursRoutes);
 app.use(`${API_PREFIX}/stock`,            stockRoutes);
+app.use(`${API_PREFIX}/branch-verticals`, branchVerticalsRoutes);
 app.use(`${API_PREFIX}/brands`, brandsRoutes);
 app.use(`${API_PREFIX}/branches`, branchesRoutes);
 app.use(`${API_PREFIX}/products`, productsRoutes);
@@ -170,7 +171,6 @@ app.use(`${API_PREFIX}/favorites`,     favoritesRoutes);
 app.use(`${API_PREFIX}/tracking`,      trackingRoutes);
 app.use(`${API_PREFIX}/group-orders`,  groupOrdersRoutes);
 app.use(`${API_PREFIX}/driver`,        driverRoutes);
-app.use(`${API_PREFIX}/reels`,         reelsRoutes);
 app.use(`${API_PREFIX}/promo-codes`,   promoCodesRoutes);
 app.use(`${API_PREFIX}/user-wallet`,   userWalletRoutes);
 

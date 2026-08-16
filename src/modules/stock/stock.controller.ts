@@ -13,15 +13,51 @@ export async function getBranchStock(req: Request, res: Response, next: NextFunc
 
     let query = supabase
       .from("branch_stock")
-      .select("*, products(id, name_fr, name_en, price, category_id, categories(name_fr))")
+      .select("*, products(id, name_fr, name_en, price, category_id, barcode, unit_type, categories(name_fr))")
       .eq("branch_id", branch_id)
       .order("stock_qty", { ascending: true });
 
-    if (low_stock === "true") query = query.lt("stock_qty", 5);
+    if (low_stock === "true") {
+      const threshold = await getLowStockThreshold(branch_id);
+      query = query.lt("stock_qty", threshold);
+    }
 
     const { data, error } = await query;
     if (error) throw new AppError(500, "DB_ERROR", error.message);
     sendSuccess(res, data ?? []);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── GET /stock/:branch_id/by-barcode/:code — recherche rapide par scan ──────
+export async function getStockByBarcode(req: Request, res: Response, next: NextFunction) {
+  try {
+    const branch_id = String(req.params.branch_id);
+    const code = String(req.params.code);
+    await assertBranchAccess(req, branch_id);
+
+    const { data: branch } = await supabase
+      .from("branches").select("brand_id").eq("id", branch_id).single();
+    if (!branch) throw new AppError(404, "BRANCH_NOT_FOUND", "Agence introuvable");
+
+    const { data: product } = await supabase
+      .from("products")
+      .select("id, name_fr, name_en, price, barcode, unit_type")
+      .eq("brand_id", branch.brand_id)
+      .eq("barcode", code)
+      .maybeSingle();
+
+    if (!product) throw new AppError(404, "PRODUCT_NOT_FOUND", "Aucun produit avec ce code-barres");
+
+    const { data: stock } = await supabase
+      .from("branch_stock")
+      .select("*")
+      .eq("branch_id", branch_id)
+      .eq("product_id", product.id)
+      .maybeSingle();
+
+    sendSuccess(res, { product, stock: stock ?? { stock_qty: 0 } });
   } catch (err) {
     next(err);
   }
@@ -165,11 +201,13 @@ export async function getStockAlerts(req: Request, res: Response, next: NextFunc
     const branch_id = String(req.params.branch_id);
     await assertBranchAccess(req, branch_id);
 
-    const threshold = parseInt(req.query.threshold as string) || 5;
+    const threshold = req.query.threshold
+      ? parseInt(req.query.threshold as string)
+      : await getLowStockThreshold(branch_id);
 
     const { data, error } = await supabase
       .from("branch_stock")
-      .select("*, products(id, name_fr, name_en, price)")
+      .select("*, products(id, name_fr, name_en, price, barcode, unit_type)")
       .eq("branch_id", branch_id)
       .lt("stock_qty", threshold)
       .order("stock_qty");
@@ -179,6 +217,20 @@ export async function getStockAlerts(req: Request, res: Response, next: NextFunc
   } catch (err) {
     next(err);
   }
+}
+
+// ─── Helper : seuil d'alerte par défaut selon le vertical de l'agence ────────
+const FALLBACK_LOW_STOCK_THRESHOLD = 5;
+
+async function getLowStockThreshold(branch_id: string): Promise<number> {
+  const { data } = await supabase
+    .from("branches")
+    .select("branch_verticals(low_stock_default_threshold)")
+    .eq("id", branch_id)
+    .single();
+
+  const vertical = data?.branch_verticals as { low_stock_default_threshold: number } | null | undefined;
+  return vertical?.low_stock_default_threshold ?? FALLBACK_LOW_STOCK_THRESHOLD;
 }
 
 // ─── Helper : vérification accès agence ──────────────────────────────────────

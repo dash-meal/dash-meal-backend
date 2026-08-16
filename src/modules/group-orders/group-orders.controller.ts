@@ -3,6 +3,7 @@ import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated } from "../../utils/response.js";
 import { randomBytes } from "node:crypto";
+import { reservePlatformStock } from "../../utils/stock.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -385,6 +386,9 @@ export async function placeGroupOrder(req: Request, res: Response, next: NextFun
     await supabase
       .from("order_items")
       .insert(orderItems.map((item) => ({ ...item, order_id: order.id })));
+
+    // Réserver le stock plateforme (décrément atomique, tout ou rien)
+    await reservePlatformStock(cart.branch_id as string, order.id, orderItems);
 
     // Marquer le panier comme commandé
     await supabase

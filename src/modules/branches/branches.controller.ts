@@ -63,7 +63,7 @@ export async function listBranches(req: Request, res: Response, next: NextFuncti
 
     let query = supabase
       .from("branches")
-      .select("*, brands(id, name, logo_url)")
+      .select("*, brands(id, name, logo_url), branch_verticals(*)")
       .order("created_at", { ascending: false });
 
     if (brand_id) query = query.eq("brand_id", brand_id);
@@ -95,7 +95,7 @@ export async function getNearbyBranches(req: Request, res: Response, next: NextF
 
     let query = supabase
       .from("branches")
-      .select("*, brands(id, name, logo_url)")
+      .select("*, brands(id, name, logo_url), branch_verticals(*)")
       .eq("is_active", true);
 
     if (brand_id) query = query.eq("brand_id", brand_id);
@@ -149,7 +149,7 @@ export async function getBranch(req: Request, res: Response, next: NextFunction)
   try {
     const { data, error } = await supabase
       .from("branches")
-      .select("*, brands(id, name, logo_url)")
+      .select("*, brands(id, name, logo_url), branch_verticals(*)")
       .eq("id", req.params.id)
       .single();
 
@@ -168,9 +168,21 @@ export async function createBranch(req: Request, res: Response, next: NextFuncti
 
     const branchType: BranchType = req.body.type ?? "other";
 
+    // Si vertical_id n'est pas fourni explicitement, le résoudre depuis `type`
+    // (garde le comportement existant du frontend qui n'envoie que `type`).
+    let vertical_id = req.body.vertical_id as string | undefined;
+    if (!vertical_id) {
+      const { data: vertical } = await supabase
+        .from("branch_verticals")
+        .select("id")
+        .eq("key", branchType)
+        .maybeSingle();
+      vertical_id = vertical?.id;
+    }
+
     const { data, error } = await supabase
       .from("branches")
-      .insert({ ...req.body, brand_id, status: "draft" })
+      .insert({ ...req.body, brand_id, vertical_id, status: "draft" })
       .select()
       .single();
 

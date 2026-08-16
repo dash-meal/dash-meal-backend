@@ -10,6 +10,7 @@ import {
 } from "../../services/campay.js";
 import { notifyOrderStatus, notifyPaymentFailed } from "../../utils/push.js";
 import { generateQrCode } from "../../utils/qrcode.js";
+import { reservePlatformStock } from "../../utils/stock.js";
 
 // ─── Initier un paiement AVANT création de commande ─────────────────────────
 // Flux : initier CamPay → USSD push → user confirme PIN → poll status → créer commande
@@ -362,6 +363,11 @@ async function createOrderFromIntent(
     console.error("[createOrderFromIntent] Erreur order_items:", itemsErr.message);
     throw new AppError(500, "CREATE_ITEMS_ERROR", `Échec items: ${itemsErr.message}`);
   }
+
+  // ── 2bis. Réserver le stock plateforme ────────────────────────────────────
+  // Paiement déjà encaissé à ce stade : on ne supprime jamais la commande en
+  // cas de stock insuffisant, on log pour réconciliation manuelle.
+  await reservePlatformStock(d.branch_id as string, order.id, items, { deleteOnFailure: false });
 
   // ── 3. Click & Collect ────────────────────────────────────────────────────
   if (d.type === "collect" && d.slot_id) {

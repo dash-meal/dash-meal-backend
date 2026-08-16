@@ -26,7 +26,7 @@ Pas de Turbo, pas de `--filter` : ce repo est autonome, ces commandes s'exécute
 
 ## Architecture
 
-**Module pattern** : chaque domaine métier a `module.controller.ts` + `module.routes.ts` + `module.service.ts` sous `src/modules/`. Modules actuels : admins, ads, analytics, audit, auth, branch-auth, branch-hours, branch-managers, branches, brands, cart, chat, collect, commissions, delivery, delivery-zones, documents, driver, driver-docs, driver-wallet, favorites, group-orders, invoices, loyalty, maps, notifications, orders, payments, products, promo-codes, promotions, reels, reports, stock, tracking, user-wallet, users, wallet.
+**Module pattern** : chaque domaine métier a `module.controller.ts` + `module.routes.ts` + `module.service.ts` sous `src/modules/`. Modules actuels : admins, ads, analytics, audit, auth, branch-auth, branch-hours, branch-managers, branches, brands, cart, chat, collect, commissions, delivery, delivery-zones, documents, driver, driver-docs, driver-wallet, favorites, group-orders, invoices, loyalty, maps, notifications, orders, payments, products, promo-codes, promotions, reports, stock, tracking, user-wallet, users, wallet.
 
 **Middleware stack** (`src/app.ts`) : `helmet` → `cors` → `morgan` → `express-rate-limit` → `express.json` → routes → `errorHandler`.
 

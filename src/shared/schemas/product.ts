@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const UNIT_TYPES = ["piece", "kg", "g", "liter", "ml", "pack", "carton"] as const;
+export type UnitType = (typeof UNIT_TYPES)[number];
+
 export const CreateProductSchema = z.object({
   branch_id: z.string().uuid(),
   category_id: z.string().uuid().optional(),
@@ -11,6 +14,8 @@ export const CreateProductSchema = z.object({
   image_url: z.string().url().optional(),
   is_active: z.boolean().default(true),
   is_hidden: z.boolean().default(false),
+  barcode: z.string().min(4).max(64).optional(),
+  unit_type: z.enum(UNIT_TYPES).optional(),
 });
 
 export const UpdateProductSchema = CreateProductSchema.partial();

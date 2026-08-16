@@ -51,10 +51,29 @@ export const CreateBranchSchema = z.object({
   lng: z.number().min(-180).max(180),
   phone: z.string().optional(),
   type: z.enum(BRANCH_TYPES).default("other"),
+  vertical_id: z.string().uuid().optional(),
   opening_hours: OpeningHoursSchema.optional(),
 });
 
 export const UpdateBranchSchema = CreateBranchSchema.partial();
+
+// ─── Branch verticals (profils de stock gérés par le superadmin) ─────────────
+
+export const CreateBranchVerticalSchema = z.object({
+  key: z.string().min(2).max(50).regex(/^[a-z0-9_]+$/, "Utiliser des minuscules, chiffres et underscores uniquement"),
+  name_fr: z.string().min(2).max(100),
+  name_en: z.string().min(2).max(100),
+  description: z.string().max(500).optional(),
+  decrement_on_order: z.boolean().default(true),
+  requires_barcode: z.boolean().default(false),
+  requires_unit_type: z.boolean().default(false),
+  low_stock_default_threshold: z.number().int().min(0).max(1000).default(5),
+});
+
+export const UpdateBranchVerticalSchema = CreateBranchVerticalSchema.omit({ key: true }).partial();
+
+export type CreateBranchVerticalInput = z.infer<typeof CreateBranchVerticalSchema>;
+export type UpdateBranchVerticalInput = z.infer<typeof UpdateBranchVerticalSchema>;
 
 export const CreateDeliveryZoneSchema = z.object({
   branch_id: z.string().uuid(),

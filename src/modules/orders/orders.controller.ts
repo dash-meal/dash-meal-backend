@@ -6,6 +6,7 @@ import { generateQrCode, generateQrCodeImage, numericCode } from "../../utils/qr
 import { campayCollect } from "../../services/campay.js";
 import { notifyOrderStatus, notifyDriversNewDelivery } from "../../utils/push.js";
 import { sendCollectQrEmail } from "../../utils/email.js";
+import { reservePlatformStock } from "../../utils/stock.js";
 
 // ─── Création unifiée avec items + paiement Campay ───────────────────────────
 export async function createOrder(req: Request, res: Response, next: NextFunction) {
@@ -51,6 +52,9 @@ export async function createOrder(req: Request, res: Response, next: NextFunctio
 
     // ── Insérer les articles ──────────────────────────────────────────────────
     await supabase.from("order_items").insert(orderItems.map((i) => ({ ...i, order_id: order.id })));
+
+    // ── Réserver le stock plateforme (décrément atomique, tout ou rien) ───────
+    await reservePlatformStock(branch_id, order.id, orderItems);
 
     // ── Enregistrements type-spécifiques ─────────────────────────────────────
     if (type === "collect" && slot_id) {
@@ -576,6 +580,9 @@ async function buildAndCreateOrder(
   await supabase.from("order_items").insert(
     items.map((item) => ({ ...item, order_id: order.id }))
   );
+
+  // Réserver le stock plateforme (décrément atomique, tout ou rien)
+  await reservePlatformStock(branch_id, order.id, items);
 
   // Vider le panier
   await supabase.from("cart_items").delete().eq("cart_id", cart.id);
