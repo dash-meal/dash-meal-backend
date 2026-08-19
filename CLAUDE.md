@@ -26,7 +26,7 @@ Pas de Turbo, pas de `--filter` : ce repo est autonome, ces commandes s'exécute
 
 ## Architecture
 
-**Module pattern** : chaque domaine métier a `module.controller.ts` + `module.routes.ts` + `module.service.ts` sous `src/modules/`. Modules actuels : admins, ads, analytics, audit, auth, branch-auth, branch-hours, branch-managers, branches, brands, cart, chat, collect, commissions, delivery, delivery-zones, documents, driver, driver-docs, driver-wallet, favorites, group-orders, invoices, loyalty, maps, notifications, orders, payments, products, promo-codes, promotions, reports, stock, tracking, user-wallet, users, wallet.
+**Module pattern** : chaque domaine métier a `module.controller.ts` + `module.routes.ts` + `module.service.ts` sous `src/modules/`. Modules actuels : admins, ads, analytics, audit, auth, branch-auth, branch-hours, branch-managers, branch-verticals, branches, brands, cart, chat, collect, commissions, delivery, delivery-zones, documents, driver, driver-docs, driver-wallet, favorites, group-orders, invoices, loyalty, maps, notifications, orders, payments, products, promo-codes, promotions, reports, stock, tracking, user-wallet, users, wallet.
 
 **Middleware stack** (`src/app.ts`) : `helmet` → `cors` → `morgan` → `express-rate-limit` → `express.json` → routes → `errorHandler`.
 
@@ -59,6 +59,17 @@ EXPO_ACCESS_TOKEN, RESEND_API_KEY, RESEND_FROM_EMAIL
 **CORS_ORIGINS** doit inclure tous les domaines des fronts qui appellent l'API. Le default dans `src/config/env.ts` n'est utilisé que si la variable n'est PAS définie sur Render — s'il y a une erreur "CORS: origine non autorisée" en prod, c'est la valeur du dashboard Render qu'il faut corriger, pas seulement le code.
 
 **Keep-alive** (`src/services/keepAlive.ts`) : auto-ping `GET /api/v1/health` toutes les 6 à 10 min (délai randomisé), actif **uniquement si `NODE_ENV=production`**, pour éviter la mise en veille du plan gratuit Render. Rien ne tourne en dev local.
+
+## Modèle de stock (multi-vertical)
+
+Chaque agence (`branches`) est rattachée à un **vertical** (`branch_verticals`, table gérée par le superadmin sous `/superadmin/verticals` — remplace l'ancien enum `BRANCH_TYPES` figé dans `src/shared/schemas/brand.ts`). Le vertical pilote le comportement du stock : code-barres/unité de mesure requis (supermarché, hypermarché...) ou non (restaurant), et le seuil d'alerte par défaut. Le superadmin peut créer de nouveaux verticals (pharmacie, restaurant livraison uniquement, etc.) sans déploiement — voir migration `023_stock_verticals.sql`.
+
+**⚠️ Le stock (`branch_stock.stock_qty`) est un pool alloué par le gérant à la plateforme, PAS le stock physique réel du magasin.** Il n'y a aucune synchronisation avec une caisse ou un ERP en magasin. Concrètement :
+- Une commande passée sur la plateforme (peu importe le canal — livraison ou click & collect) décrémente ce pool via le RPC `reserve_platform_stock` (tout ou rien, atomique).
+- Une vente faite directement en magasin, hors plateforme, **n'est jamais déduite** de ce pool — le gérant doit gérer lui-même l'écart entre ce qu'il alloue à la plateforme et son stock réel.
+- Inversement, une rupture sur la plateforme ne signifie pas une rupture réelle en magasin.
+
+**À faire plus tard (chantier légal / CGU, pas encore rédigé)** : cette distinction doit être explicitée dans les conditions d'utilisation — la plateforme ne garantit ni que la disponibilité en magasin dépasse le stock alloué en ligne, ni l'inverse. Sans cette clause, un client final pourrait raisonnablement croire que "en rupture sur l'app" signifie "en rupture en magasin" (ou l'inverse), ce qui n'est pas le cas.
 
 ## Conventions clés
 

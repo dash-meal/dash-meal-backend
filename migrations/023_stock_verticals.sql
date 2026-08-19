@@ -147,8 +147,12 @@ DECLARE
   v_to_decrement  UUID[] := ARRAY[]::UUID[];
   v_qty_map       JSONB := '{}'::JSONB;
 BEGIN
-  -- Passe 1 : verrouiller les lignes concernées et vérifier la disponibilité
-  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  -- Passe 1 : verrouiller les lignes concernées et vérifier la disponibilité.
+  -- Tri par product_id : garantit un ordre de verrouillage identique entre
+  -- appels concurrents (deux commandes qui partagent des produits dans un
+  -- ordre différent) et évite ainsi les deadlocks Postgres.
+  FOR v_item IN
+    SELECT elem FROM jsonb_array_elements(p_items) AS elem ORDER BY elem->>'product_id'
   LOOP
     v_product_id := (v_item->>'product_id')::UUID;
     v_quantity   := (v_item->>'quantity')::INTEGER;
