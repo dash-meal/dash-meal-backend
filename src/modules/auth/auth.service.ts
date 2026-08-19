@@ -520,58 +520,6 @@ export async function loginDriver(input: { phone: string; pin: string }): Promis
   return { driver: safeDriver, tokens };
 }
 
-// ─── Driver OTP auth (web PWA) ────────────────────────────────────────────────
-
-export async function sendDriverOtp(phone: string): Promise<{ sent: boolean }> {
-  const { data: driver } = await supabase
-    .from("drivers")
-    .select("id, is_active")
-    .eq("phone", phone)
-    .single();
-
-  if (!driver) {
-    throw new AppError(404, "DRIVER_NOT_FOUND", "Aucun livreur trouvé avec ce numéro");
-  }
-  if (!driver.is_active) {
-    throw new AppError(403, "DRIVER_INACTIVE", "Compte livreur désactivé. Contactez votre administrateur.");
-  }
-
-  const { smsSent } = await sendOtp(phone);
-  return { sent: smsSent };
-}
-
-export async function verifyDriverOtp(phone: string, code: string): Promise<{ driver: object; tokens: AuthTokens }> {
-  const { data: driver } = await supabase
-    .from("drivers")
-    .select("id, name, phone, branch_id, brand_id, is_active, vehicle_type, photo_url")
-    .eq("phone", phone)
-    .single();
-
-  if (!driver) {
-    throw new AppError(404, "DRIVER_NOT_FOUND", "Livreur introuvable");
-  }
-
-  const isValid = await verifyOtp(phone, code);
-  if (!isValid) {
-    throw new AppError(400, "INVALID_OTP", "Code OTP invalide ou expiré");
-  }
-
-  const payload = {
-    id: driver.id,
-    role: "driver",
-    name: driver.name,
-    phone: driver.phone,
-    brand_id: driver.brand_id,
-    branch_id: driver.branch_id,
-  };
-  const tokens: AuthTokens = {
-    access_token: signAccessToken(payload),
-    refresh_token: signRefreshToken({ id: driver.id, role: "driver" }),
-    expires_in: 15 * 60,
-  };
-  return { driver, tokens };
-}
-
 // ─── Demande d'accès marque ───────────────────────────────────────────────────
 
 export async function applyBrand(input: {

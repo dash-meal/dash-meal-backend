@@ -55,16 +55,6 @@ router.post(
   validate(z.object({ phone: z.string().min(8), pin: z.string().min(4).max(8) })),
   controller.loginDriver,
 );
-router.post(
-  "/driver/send-otp",
-  validate(z.object({ phone: z.string().min(8) })),
-  controller.sendDriverOtp,
-);
-router.post(
-  "/driver/verify-otp",
-  validate(z.object({ phone: z.string().min(8), code: z.string().length(6) })),
-  controller.verifyDriverOtp,
-);
 
 // ─── Admin (marque) ───────────────────────────────────────────────────────────
 router.post("/admin/login", validate(LoginAdminSchema), controller.loginAdmin);

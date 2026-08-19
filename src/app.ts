@@ -133,7 +133,6 @@ app.get(`${API_PREFIX}/health`, (_req, res) => {
 // Rate limiters spécifiques appliqués avant les routes d'auth globales
 app.use(`${API_PREFIX}/auth/user/register`,      registerLimiter);
 app.use(`${API_PREFIX}/auth/user/request-reset`, resetLimiter);
-app.use(`${API_PREFIX}/auth/driver/send-otp`,    resetLimiter);
 app.use(`${API_PREFIX}/auth/apply`,              applyLimiter);
 app.use(`${API_PREFIX}/auth`,                    authLimiter, authRoutes);
 app.use(`${API_PREFIX}/branch-auth`,             authLimiter, branchAuthRoutes);
