@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { authenticate, requireRole } from "../../middleware/auth.js";
+import { authenticate, requireRole, loadBrandFromBranchParam, requireBranchAccess, requireOwnBrand } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import * as controller from "./branch-hours.controller.js";
 
@@ -26,7 +26,17 @@ router.get("/:branch_id/is-open", controller.isBranchOpen);
 router.get("/:branch_id",         controller.getBranchHours);
 
 // Protégé : admin ou branch_manager de cette agence
-router.put(  "/:branch_id",      authenticate, requireRole("admin", "superadmin", "branch_manager"), validate(HoursSchema), controller.setBranchHours);
-router.patch("/:branch_id/:day", authenticate, requireRole("admin", "superadmin", "branch_manager"), validate(DaySchema),   controller.updateDayHours);
+router.put(
+  "/:branch_id",
+  authenticate, requireRole("admin", "superadmin", "branch_manager"),
+  loadBrandFromBranchParam("branch_id"), requireBranchAccess, requireOwnBrand,
+  validate(HoursSchema), controller.setBranchHours
+);
+router.patch(
+  "/:branch_id/:day",
+  authenticate, requireRole("admin", "superadmin", "branch_manager"),
+  loadBrandFromBranchParam("branch_id"), requireBranchAccess, requireOwnBrand,
+  validate(DaySchema), controller.updateDayHours
+);
 
 export default router;

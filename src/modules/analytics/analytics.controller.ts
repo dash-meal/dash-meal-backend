@@ -227,14 +227,40 @@ export async function getOrdersStats(req: Request, res: Response, next: NextFunc
 }
 
 // ─── GET /analytics/top-products ─────────────────────────────────────────────
+// Portée par tenant : un admin ne voit que les produits vendus par les agences
+// de sa marque, un branch_manager uniquement ceux de sa propre agence, et le
+// superadmin voit tout (pas de filtre).
 export async function getTopProducts(req: Request, res: Response, next: NextFunction) {
   try {
-    const { data, error } = await supabase
+    const user = req.user!;
+    let branchIds: string[] | null = null; // null = pas de restriction (superadmin)
+
+    if (user.role === "branch_manager") {
+      if (!user.branch_id) throw new AppError(403, "FORBIDDEN", "Agence non associée");
+      branchIds = [user.branch_id];
+    } else if (user.role === "admin") {
+      if (!user.brand_id) throw new AppError(403, "FORBIDDEN", "Marque non associée");
+      const { data: branches } = await supabase.from("branches").select("id").eq("brand_id", user.brand_id);
+      branchIds = (branches ?? []).map((b) => b.id);
+      if (!branchIds.length) {
+        sendSuccess(res, []);
+        return;
+      }
+    }
+
+    let query = supabase
       .from("order_items")
-      .select("product_id, quantity, products(name_fr)")
+      .select("product_id, quantity, products(name_fr), orders!inner(branch_id)")
       .limit(10);
+
+    if (branchIds) query = query.in("orders.branch_id", branchIds);
+
+    const { data, error } = await query;
     if (error) throw new AppError(500, "FETCH_ERROR", "Erreur lors de la récupération");
-    sendSuccess(res, data);
+
+    // Ne pas exposer le champ technique orders(branch_id) utilisé pour le filtre
+    const items = (data ?? []).map(({ orders, ...rest }: any) => rest);
+    sendSuccess(res, items);
   } catch (err) {
     next(err);
   }
@@ -254,12 +280,8 @@ export async function getBranchStats(req: Request, res: Response, next: NextFunc
   try {
     const { branch_id } = req.params;
 
-    if (req.user!.role === "admin") {
-      const { data: branch } = await supabase.from("branches").select("brand_id").eq("id", branch_id).single();
-      if (!branch || branch.brand_id !== req.user!.brand_id) {
-        throw new AppError(403, "FORBIDDEN", "Accès refusé à cette agence");
-      }
-    }
+    // Accès vérifié en amont par loadBrandFromBranchParam + requireBranchAccess
+    // + requireOwnBrand (voir analytics.routes.ts)
 
     const [
       { count: totalOrders },

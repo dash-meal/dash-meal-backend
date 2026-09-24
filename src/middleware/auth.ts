@@ -1,6 +1,8 @@
 ﻿import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
+import { supabase } from "../config/supabase.js";
+import { AppError } from "./errorHandler.js";
 import type { AuthUser } from "../shared/index.js";
 
 // Augmenter le type Request pour inclure l'utilisateur authentifié
@@ -109,4 +111,124 @@ export function requireOwnBrand(req: Request, res: Response, next: NextFunction)
     return;
   }
   next();
+}
+
+// ─── Résolution de propriétaire pour les routes basées sur :id ───────────────
+//
+// requireBranchAccess / requireOwnBrand lisent branchId/brandId depuis
+// req.params.branchId|brandId ou req.body.branch_id|brand_id. Sur les routes
+// du type /orders/:id/status ou /branches/:id, le seul identifiant présent
+// dans l'URL est celui de la ressource elle-même (commande, agence) — pas sa
+// marque ou son agence propriétaire. Ces deux middlewares vont chercher cette
+// info en base et l'injectent dans req.params, pour que requireBranchAccess
+// et requireOwnBrand puissent ensuite s'appliquer normalement.
+//
+// À placer APRÈS authenticate/requireRole et AVANT requireBranchAccess /
+// requireOwnBrand dans la chaîne de middlewares.
+
+// Résout branch_id et brand_id d'une commande depuis req.params.id
+export const loadOrderOwnership = loadOrderOwnershipFromParam("id");
+
+// Version générique : même résolution que loadOrderOwnership, mais pour un
+// nom de paramètre d'URL différent (ex: "orderId" sur /collect/admin/order/:orderId).
+export function loadOrderOwnershipFromParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orderId = req.params[paramName];
+      if (!orderId) {
+        next(new AppError(400, "MISSING_ORDER_ID", "Identifiant de commande requis"));
+        return;
+      }
+
+      const { data: order, error } = await supabase
+        .from("orders")
+        .select("branch_id, branches(brand_id)")
+        .eq("id", orderId)
+        .single();
+
+      if (error || !order) {
+        next(new AppError(404, "NOT_FOUND", "Commande introuvable"));
+        return;
+      }
+
+      if (order.branch_id) req.params.branchId = order.branch_id;
+      const brandId = (order.branches as { brand_id?: string } | null)?.brand_id;
+      if (brandId) req.params.brandId = brandId;
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// Résout brand_id d'une agence depuis req.params.id
+export const loadBranchOwnership = loadBrandFromBranchParam("id");
+
+// Version générique : résout brand_id d'une agence depuis n'importe quel nom
+// de paramètre d'URL (ex: "branch_id" sur /branch-hours/:branch_id,
+// "branchId" sur /collect/branch/:branchId, "id" sur /branches/:id...).
+// Injecte le résultat dans req.params.brandId pour requireOwnBrand.
+export function loadBrandFromBranchParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const branchId = req.params[paramName];
+      if (!branchId) {
+        next(new AppError(400, "MISSING_BRANCH_ID", "Identifiant d'agence requis"));
+        return;
+      }
+
+      const { data: branch, error } = await supabase
+        .from("branches")
+        .select("brand_id")
+        .eq("id", branchId)
+        .single();
+
+      if (error || !branch) {
+        next(new AppError(404, "NOT_FOUND", "Agence introuvable"));
+        return;
+      }
+
+      if (branch.brand_id) req.params.brandId = branch.brand_id;
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// ─── Vérification manuelle (hors chaîne de middlewares) ───────────────────────
+//
+// Certaines ressources ne sont identifiables qu'après une requête en base
+// (ex: /collect/scan résout la commande à partir d'un qr_code envoyé dans le
+// body — aucun branchId n'est disponible dans l'URL avant cette requête).
+// Dans ces cas, un middleware de route ne peut pas s'appliquer : on vérifie
+// l'accès directement dans le controller, une fois la ressource chargée.
+//
+// Lève une AppError (401/403) — à laisser remonter via le bloc try/catch +
+// next(err) déjà présent dans les controllers de ce projet.
+export async function assertBranchOwnership(
+  user: AuthUser | undefined,
+  branchId: string | null | undefined
+): Promise<void> {
+  if (!user) throw new AppError(401, "UNAUTHORIZED", "Non authentifié");
+  if (user.role === "superadmin") return;
+
+  if (user.role === "admin") {
+    if (!branchId) throw new AppError(403, "FORBIDDEN", "Accès refusé");
+    const { data: branch } = await supabase.from("branches").select("brand_id").eq("id", branchId).single();
+    if (!branch || branch.brand_id !== user.brand_id) {
+      throw new AppError(403, "FORBIDDEN", "Accès refusé à cette agence");
+    }
+    return;
+  }
+
+  if (user.role === "branch_manager") {
+    if (!branchId || branchId !== user.branch_id) {
+      throw new AppError(403, "BRANCH_ACCESS_DENIED", "Accès refusé à cette agence");
+    }
+    return;
+  }
+
+  throw new AppError(403, "FORBIDDEN", "Accès refusé");
 }
