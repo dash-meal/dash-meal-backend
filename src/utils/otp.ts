@@ -1,6 +1,7 @@
 ﻿import { supabase } from "../config/supabase.js";
 import { OTP_EXPIRES_IN_MINUTES, OTP_LENGTH } from "../shared/index.js";
 import { env } from "../config/env.js";
+import { logger } from "./logger.js";
 
 function generateCode(): string {
   return Math.floor(
@@ -32,11 +33,10 @@ export async function sendOtp(phone: string): Promise<{ code: string; smsSent: b
     { onConflict: "phone" }
   );
 
-  if (env.OTP_LOG_CODES) console.log(`[OTP][SMS] ${normalized}: ${code} (expires in ${OTP_EXPIRES_IN_MINUTES} min)`);
+  if (env.OTP_LOG_CODES) logger.info(`[OTP][SMS] ${normalized}: ${code} (expire dans ${OTP_EXPIRES_IN_MINUTES} min)`);
 
   if (!env.AT_API_KEY || !env.AT_USERNAME) {
-    console.warn("⚠️  AT_API_KEY / AT_USERNAME manquants — SMS non envoyé");
-    if (env.OTP_LOG_CODES) console.log(`[OTP] Code pour ***${normalized.slice(-4)} : ${code}`);
+    logger.warn("AT_API_KEY / AT_USERNAME manquants — SMS non envoyé");
     return { code, smsSent: false };
   }
 
@@ -64,16 +64,14 @@ export async function sendOtp(phone: string): Promise<{ code: string; smsSent: b
 
     const recipient = result.SMSMessageData?.Recipients?.[0];
     if (!response.ok || !recipient || recipient.statusCode !== 101) {
-      console.error(`❌ Échec SMS Africa's Talking (${response.status}): ${JSON.stringify(result)}`);
-      if (env.OTP_LOG_CODES) console.log(`[OTP] Code pour ***${normalized.slice(-4)} : ${code}`);
+      logger.error({ status: response.status, result }, "Échec SMS Africa's Talking");
       return { code, smsSent: false };
     }
 
-    console.log(`✅ SMS OTP envoyé à ***${normalized.slice(-4)} (id: ${recipient.messageId})`);
+    logger.info({ phoneSuffix: normalized.slice(-4), messageId: recipient.messageId }, "SMS OTP envoyé");
     return { code, smsSent: true };
   } catch (err) {
-    console.error("❌ Erreur réseau SMS Africa's Talking:", err);
-    if (env.OTP_LOG_CODES) console.log(`[OTP] Code pour ***${normalized.slice(-4)} : ${code}`);
+    logger.error({ err }, "Erreur réseau SMS Africa's Talking");
     return { code, smsSent: false };
   }
 }
@@ -106,7 +104,7 @@ export async function verifyEmailOtp(email: string, code: string): Promise<boole
     .maybeSingle();
 
   if (error) {
-    console.error("[verifyEmailOtp] lookup failed:", error.message);
+    logger.error({ err: error }, "[verifyEmailOtp] Lecture OTP échouée");
     return false;
   }
 

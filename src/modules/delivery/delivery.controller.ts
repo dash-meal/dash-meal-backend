@@ -4,6 +4,7 @@ import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated } from "../../utils/response.js";
 import { notifyUser, notifyOrderStatus } from "../../utils/push.js";
 import { creditDriverEarning } from "../driver-wallet/driver-wallet.controller.js";
+import { logger } from "../../utils/logger.js";
 
 export async function getDriverProfile(req: Request, res: Response, next: NextFunction) {
   try {
@@ -322,7 +323,7 @@ export async function updateDeliveryStatus(req: Request, res: Response, next: Ne
         const { data: branch } = await supabase
           .from("branches").select("brand_id").eq("id", order.branch_id).single();
         if (branch?.brand_id) {
-          creditDriverEarning(delivery.driver_id, branch.brand_id, delivery.order_id, Number(order.delivery_fee)).catch(console.error);
+          creditDriverEarning(delivery.driver_id, branch.brand_id, delivery.order_id, Number(order.delivery_fee)).catch((err) => logger.error({ err, orderId: delivery.order_id }, "[Delivery] Crédit gain livreur échoué"));
         }
       }
     }

@@ -49,6 +49,7 @@ import groupOrdersRoutes from "./modules/group-orders/group-orders.routes.js";
 import driverRoutes from "./modules/driver/driver.routes.js";
 import promoCodesRoutes  from "./modules/promo-codes/promo-codes.routes.js";
 import userWalletRoutes  from "./modules/user-wallet/user-wallet.routes.js";
+import { logger } from "./utils/logger.js";
 
 const app: Application = express();
 
@@ -188,9 +189,7 @@ app.use(errorHandler);
 app.listen(env.PORT, "0.0.0.0", () => {
   const host = process.env.RENDER_EXTERNAL_URL
     ?? `http://localhost:${env.PORT}`;
-  console.log(`🚀 Dash Meal Backend démarré sur le port ${env.PORT}`);
-  console.log(`   Environnement : ${env.NODE_ENV}`);
-  console.log(`   API : ${host}${API_PREFIX}`);
+  logger.info({ port: env.PORT, env: env.NODE_ENV, api: `${host}${API_PREFIX}` }, "Dash Meal Backend démarré");
   startStaleOrderNotifier();
   if (env.NODE_ENV === "production") startKeepAlive();
 });

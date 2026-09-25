@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase.js";
+import { logger } from "./logger.js";
 
 // ─── Types Expo Push ──────────────────────────────────────────────────────────
 
@@ -32,21 +33,21 @@ async function sendToExpo(messages: ExpoPushMessage[]): Promise<void> {
     const result = await response.json() as { data?: { status: string; id?: string; message?: string; details?: unknown }[] };
 
     if (!response.ok) {
-      console.error(`[Push] Expo API error (${response.status}):`, JSON.stringify(result));
+      logger.error({ status: response.status, result }, "[Push] Erreur API Expo");
       return;
     }
 
     // Expo renvoie { data: [{ status: "ok"|"error", ... }] } même en HTTP 200
     result.data?.forEach((r, i) => {
       if (r.status === "error") {
-        console.error(`[Push] Message ${i} rejeté par Expo:`, r.message, r.details ?? "");
+        logger.error({ index: i, message: r.message, details: r.details }, "[Push] Message rejeté par Expo");
       } else {
-        console.log(`[Push] Message ${i} envoyé OK (id: ${r.id ?? "—"})`);
+        logger.debug({ index: i, id: r.id }, "[Push] Message envoyé");
       }
     });
   } catch (err) {
     // Ne jamais faire crasher l'app pour une notif ratée
-    console.error("[Push] Network error:", err);
+    logger.error({ err }, "[Push] Erreur réseau");
   }
 }
 
@@ -64,16 +65,16 @@ export async function notifyUser(
     .eq("user_id", userId);
 
   if (error) {
-    console.error(`[Push] Erreur récupération tokens pour user ${userId}:`, error.message);
+    logger.error({ err: error, userId }, "[Push] Récupération tokens échouée");
     return;
   }
 
   if (!tokens || tokens.length === 0) {
-    console.log(`[Push] Aucun token pour user ${userId} — notification ignorée`);
+    logger.debug({ userId }, "[Push] Aucun token — notification ignorée");
     return;
   }
 
-  console.log(`[Push] Envoi notif à user ${userId} (${tokens.length} appareil(s)): "${title}"`);
+  logger.info({ userId, devices: tokens.length, title }, "[Push] Envoi notification");
 
   const messages: ExpoPushMessage[] = tokens.map(({ token }) => ({
     to: token,
@@ -151,7 +152,7 @@ export async function notifyDriversNewDelivery(
   const tokens = drivers.map((d) => d.push_token as string).filter(Boolean);
   if (tokens.length === 0) return;
 
-  console.log(`[Push] Nouvelle livraison → ${tokens.length} livreur(s) de la marque ${brandId}`);
+  logger.info({ brandId, drivers: tokens.length }, "[Push] Nouvelle livraison notifiée aux livreurs");
 
   const messages: ExpoPushMessage[] = tokens.map((token) => ({
     to: token,

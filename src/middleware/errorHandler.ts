@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { logger } from "../utils/logger.js";
 
 export class AppError extends Error {
   constructor(
@@ -25,7 +26,7 @@ export function errorHandler(
     return;
   }
 
-  console.error("Erreur non gérée:", err);
+  logger.error({ err, method: req.method, url: req.originalUrl }, "Erreur non gérée");
   res.status(500).json({
     success: false,
     error: {

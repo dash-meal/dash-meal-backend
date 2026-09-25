@@ -12,6 +12,7 @@
 
 import { env } from "../config/env.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { logger } from "../utils/logger.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -222,7 +223,7 @@ export async function campayCollect(params: {
 
   if (!res.ok) {
     const body = await res.text();
-    console.error(`[Campay collect] status=${res.status} body=${body}`);
+    logger.error({ status: res.status, body }, "[Campay collect] Réponse en erreur");
     throw new AppError(502, "CAMPAY_ERROR", GENERIC_PROVIDER_ERROR);
   }
 
@@ -297,7 +298,7 @@ export async function campayWithdraw(params: {
 
   if (!res.ok) {
     const raw = await res.text();
-    console.error(`[Campay withdraw] status=${res.status} body=${raw}`);
+    logger.error({ status: res.status, body: raw }, "[Campay withdraw] Réponse en erreur");
     throw new AppError(502, "CAMPAY_WITHDRAW_ERROR", GENERIC_PROVIDER_ERROR);
   }
 
@@ -323,7 +324,7 @@ export async function campayGetSubscriberName(phone: string): Promise<{
   });
 
   const raw = await res.text();
-  console.log(`[Campay get-name] status=${res.status} body=${raw}`);
+  logger.debug({ status: res.status, body: raw }, "[Campay get-name] Réponse");
 
   if (!res.ok) {
     // Endpoint non supporté par ce compte Campay → traiter comme non disponible

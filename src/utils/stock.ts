@@ -1,5 +1,6 @@
 import { supabase } from "../config/supabase.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { logger } from "./logger.js";
 
 interface StockItem {
   product_id: string;
@@ -41,14 +42,14 @@ export async function reservePlatformStock(
   const insufficientStock = error.message?.startsWith("INSUFFICIENT_STOCK");
 
   if (!insufficientStock) {
-    console.error("[reservePlatformStock] Erreur RPC:", error.message);
+    logger.error({ err: error, orderId: order_id }, "[reservePlatformStock] Erreur RPC");
     if (deleteOnFailure) await supabase.from("orders").delete().eq("id", order_id);
     throw new AppError(500, "STOCK_RESERVATION_ERROR", "Échec de la réservation du stock");
   }
 
   if (!deleteOnFailure) {
     // Commande déjà payée : on ne la supprime pas, on log pour réconciliation manuelle.
-    console.error(`[reservePlatformStock] Stock insuffisant sur commande déjà payée order_id=${order_id} — vente en survente, réconciliation manuelle requise`);
+    logger.error({ orderId: order_id }, "[reservePlatformStock] Stock insuffisant sur commande déjà payée — survente, réconciliation manuelle requise");
     return;
   }
 

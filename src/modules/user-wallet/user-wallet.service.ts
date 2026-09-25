@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { campayCollect, campayWithdraw } from "../../services/campay.js";
+import { logger } from "../../utils/logger.js";
 
 const TOPUP_CALLBACK = process.env.CAMPAY_CALLBACK_URL?.replace("/payments/", "/user-wallet/") ?? "";
 
@@ -106,7 +107,7 @@ export async function initiateActivation(input: {
     .single();
 
   if (txErr || !tx) {
-    console.error("[wallet/activate] DB insert error:", txErr?.message, txErr?.details, txErr?.hint);
+    logger.error({ err: txErr }, "[initiateActivation] Insertion transaction échouée");
     throw new AppError(500, "INTENT_ERROR", "Impossible de préparer l'activation. Réessayez.");
   }
 
@@ -131,7 +132,7 @@ export async function initiateActivation(input: {
     .update({ reference: campayData.reference })
     .eq("id", tx.id);
 
-  console.log(`[initiateActivation] ✅ Campay OK — reference="${campayData.reference}" ussd="${campayData.ussd_code}" operator="${campayData.operator}"`);
+  logger.info({ reference: campayData.reference, operator: campayData.operator }, "[initiateActivation] Paiement Campay initié");
 
   return {
     reference: campayData.reference,
@@ -146,8 +147,6 @@ export async function initiateActivation(input: {
 // Throws        → wallet insert failed (caller should NOT return "completed")
 
 export async function confirmActivation(reference: string, amount: number): Promise<boolean> {
-  console.log(`[confirmActivation] cherche tx pending reference="${reference}" amount=${amount}`);
-
   const { data: pending, error: fetchErr } = await supabase
     .from("user_wallet_transactions")
     .select("*")
@@ -156,14 +155,12 @@ export async function confirmActivation(reference: string, amount: number): Prom
     .eq("status", "pending")
     .maybeSingle();
 
-  if (fetchErr) console.error("[confirmActivation] erreur fetch DB:", fetchErr.message, fetchErr.details);
+  if (fetchErr) logger.error({ err: fetchErr, reference }, "[confirmActivation] Lecture transaction échouée");
 
   if (!pending) {
-    console.log(`[confirmActivation] aucun tx pending trouvé pour reference="${reference}" → retourne false`);
+    logger.debug({ reference }, "[confirmActivation] Aucune transaction pending (déjà traitée)");
     return false; // déjà traité
   }
-  console.log(`[confirmActivation] tx trouvé: id="${pending.id}" user="${pending.user_id}"`);
-
   const { cardNumber, cardName, pinHash } = pending.metadata as { cardNumber: string; cardName: string; pinHash: string };
 
   const { data: wallet, error } = await supabase
@@ -179,11 +176,9 @@ export async function confirmActivation(reference: string, amount: number): Prom
     .single();
 
   if (error || !wallet) {
-    console.error("[confirmActivation] ❌ wallet insert failed:", error?.message, error?.details, error?.hint, error?.code);
+    logger.error({ err: error, reference }, "[confirmActivation] Création wallet échouée");
     throw new AppError(500, "WALLET_CREATE_ERROR", "Impossible de créer le wallet. Réessayez dans quelques secondes.");
   }
-
-  console.log(`[confirmActivation] ✅ wallet créé id="${wallet.id}" — mise à jour transaction...`);
 
   const { error: updateErr } = await supabase
     .from("user_wallet_transactions")
@@ -195,8 +190,8 @@ export async function confirmActivation(reference: string, amount: number): Prom
     })
     .eq("reference", reference);
 
-  if (updateErr) console.error("[confirmActivation] erreur update transaction:", updateErr.message);
-  else console.log(`[confirmActivation] ✅ transaction marquée completed`);
+  if (updateErr) logger.error({ err: updateErr, reference }, "[confirmActivation] Mise à jour transaction échouée");
+  else logger.info({ reference, walletId: wallet.id, userId: pending.user_id }, "[confirmActivation] Wallet activé");
 
   return true;
 }
