@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction } from "express";
-import multer from "multer";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated } from "../../utils/response.js";
@@ -11,19 +10,6 @@ type DocType = (typeof ALLOWED_TYPES)[number];
 
 const DRIVER_DOCS_BUCKET = "driver-documents";
 const DOCS_NEEDED_FOR_SUBMISSION = 2;
-
-export const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-  fileFilter: (_req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new AppError(400, "INVALID_FILE_TYPE", "Type de fichier non supporté (JPEG, PNG, WebP, PDF acceptés)"));
-    }
-  },
-});
 
 export async function getDriverDocs(req: Request, res: Response, next: NextFunction) {
   try {

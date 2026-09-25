@@ -1,16 +1,15 @@
 ﻿import { Router } from "express";
 import { z } from "zod";
-import multer from "multer";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { CreateAdminSchema, CreateDriverSchema } from "../../shared/index.js";
+import { imageUpload } from "../../middleware/upload.js";
 import * as controller from "./admins.controller.js";
 
 const router: import("express").Router = Router();
-const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ─── Gestion des drivers (admin de la marque) — AVANT /:id pour éviter le conflit ──
-router.post("/drivers/upload-photo", authenticate, requireRole("admin", "superadmin"), photoUpload.single("photo"), controller.uploadDriverPhoto);
+router.post("/drivers/upload-photo", authenticate, requireRole("admin", "superadmin"), imageUpload.single("photo"), controller.uploadDriverPhoto);
 router.get("/drivers", authenticate, requireRole("admin", "superadmin"), controller.listDrivers);
 router.get("/drivers/:id", authenticate, requireRole("admin", "superadmin"), controller.getDriver);
 router.post("/drivers", authenticate, requireRole("admin", "superadmin"), validate(CreateDriverSchema), controller.createDriver);

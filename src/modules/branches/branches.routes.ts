@@ -1,12 +1,11 @@
 ﻿import { Router } from "express";
-import multer from "multer";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { CreateBranchSchema, UpdateBranchSchema, CreateDeliveryZoneSchema } from "../../shared/index.js";
+import { imageUpload } from "../../middleware/upload.js";
 import * as controller from "./branches.controller.js";
 
 const router: import("express").Router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 router.get("/nearby", controller.getNearbyBranches);
@@ -23,7 +22,7 @@ router.patch("/:id", authenticate, requireRole("admin", "superadmin"), validate(
 router.delete("/:id", authenticate, requireRole("admin", "superadmin"), controller.deleteBranch);
 
 // ─── Image agence ─────────────────────────────────────────────────────────────
-router.post("/:id/image", authenticate, requireRole("admin", "superadmin"), upload.single("image"), controller.uploadBranchImage);
+router.post("/:id/image", authenticate, requireRole("admin", "superadmin"), imageUpload.single("image"), controller.uploadBranchImage);
 
 // ─── Workflow live ────────────────────────────────────────────────────────────
 router.post("/:id/request-live", authenticate, requireRole("admin", "branch_manager"), controller.requestLive);

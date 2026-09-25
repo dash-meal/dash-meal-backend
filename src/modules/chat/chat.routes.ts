@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../../middleware/auth.js";
+import { chatMediaUpload } from "../../middleware/upload.js";
 import * as controller from "./chat.controller.js";
 
 const router: import("express").Router = Router();
@@ -18,7 +19,7 @@ router.post("/conversations/:conversationId/typing", authenticate, controller.se
 router.patch("/conversations/:conversationId/read", authenticate, controller.markAsRead);
 
 // ─── Upload média (photo ou audio) ───────────────────────────────────────────
-router.post("/upload", authenticate, controller.mediaUpload.single("file"), controller.uploadChatMedia);
+router.post("/upload", authenticate, chatMediaUpload.single("file"), controller.uploadChatMedia);
 
 // ─── Legacy : liste des conversations d'une commande ─────────────────────────
 router.get("/conversations/:orderId", authenticate, controller.getConversations);

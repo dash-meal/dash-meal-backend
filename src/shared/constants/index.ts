@@ -12,9 +12,17 @@ export const JWT_REFRESH_EXPIRES_IN = "30d";
 export const OTP_EXPIRES_IN_MINUTES = 10;
 export const OTP_LENGTH = 6;
 
-// Upload
+// Upload — source unique des limites, appliquées par src/middleware/upload.ts
 export const MAX_IMAGE_SIZE_MB = 5;
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+// Documents (pièces légales, KYC livreur) : images scannées ou PDF
+export const MAX_DOCUMENT_SIZE_MB = 10;
+export const ALLOWED_DOCUMENT_TYPES = [...ALLOWED_IMAGE_TYPES, "application/pdf"];
+// Messages vocaux du chat
+export const MAX_AUDIO_SIZE_MB = 15;
+export const ALLOWED_AUDIO_TYPES = [
+  "audio/mpeg", "audio/mp4", "audio/wav", "audio/aac", "audio/m4a", "audio/x-m4a", "audio/3gpp", "audio/webm",
+];
 
 // Commandes
 export const MIN_ORDER_COLLECT_ADVANCE_MINUTES = 30; // Click & Collect : min 30min à l'avance

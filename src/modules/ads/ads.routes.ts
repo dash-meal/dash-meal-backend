@@ -1,22 +1,21 @@
 import { Router } from "express";
-import multer from "multer";
 import { z } from "zod";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { env } from "../../config/env.js";
+import { createUpload } from "../../middleware/upload.js";
+import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_MB } from "../../shared/index.js";
 import * as controller from "./ads.controller.js";
 
 const router: import("express").Router = Router();
 
-const imageUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error("JPG, PNG, WEBP ou GIF uniquement"));
-  },
+// Les pubs acceptent aussi les GIF animés, en plus des formats image standard
+const imageUpload = createUpload({
+  allowedTypes: [...ALLOWED_IMAGE_TYPES, "image/gif"],
+  maxSizeMb: MAX_IMAGE_SIZE_MB,
+  typesLabel: "JPEG, PNG, WEBP, GIF",
 });
 
 async function uploadAdImage(file: Express.Multer.File, brandId: string): Promise<string> {

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
-import multer from "multer";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
+import { assertImageSize } from "../../middleware/upload.js";
 import { sendSuccess, sendCreated } from "../../utils/response.js";
 import { notifyUser } from "../../utils/push.js";
 
@@ -212,19 +212,10 @@ export async function sendMessage(req: Request, res: Response, next: NextFunctio
 
 // ─── Upload média (photo ou audio) ───────────────────────────────────────────
 
-export const mediaUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15 Mo max
-  fileFilter: (_req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png", "image/webp", "audio/mpeg", "audio/mp4", "audio/wav", "audio/aac", "audio/m4a", "audio/x-m4a", "audio/3gpp", "audio/webm"];
-    if (allowed.includes(file.mimetype)) cb(null, true);
-    else cb(new Error("Type non supporté (image JPEG/PNG/WEBP ou audio MP3/M4A/WAV)"));
-  },
-});
-
 export async function uploadChatMedia(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.file) throw new AppError(400, "NO_FILE", "Aucun fichier fourni");
+    assertImageSize(req.file);
 
     const isAudio = req.file.mimetype.startsWith("audio/");
     const bucket = isAudio ? "chat-audio" : "chat-images";
