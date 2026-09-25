@@ -679,14 +679,12 @@ export async function appleAuth(input: {
   const name = [first_name, last_name].filter(Boolean).join(" ").trim() || email?.split("@")[0] || "Utilisateur";
 
   // 2. Chercher l'utilisateur par apple_id ou email
-  let user: any = null;
-
   const { data: byAppleId } = await supabase
     .from("users")
     .select("id, name, phone, email, apple_id, avatar_url, is_verified")
     .eq("apple_id", apple_id)
     .maybeSingle();
-  user = byAppleId;
+  let user: any = byAppleId;
 
   if (!user && email) {
     const { data: byEmail } = await supabase

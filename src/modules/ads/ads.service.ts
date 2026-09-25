@@ -20,19 +20,14 @@ export async function initiateAdPayment(brandId: string, input: {
   const { title, image_url, target_count, payment_phone, payment_method } = input;
   const amount = calculateAdPrice(target_count);
 
-  // Déclencher le USSD push Campay
-  let campayData;
-  try {
-    campayData = await campayCollect({
-      amount,
-      phone: payment_phone,
-      description: `DashMeal Pub "${title}" — ${target_count} utilisateurs`,
-      externalReference: `ad_${brandId.slice(0, 8)}_${Date.now()}`,
-      paymentMethod: payment_method,
-    });
-  } catch (err) {
-    throw err; // remonte vers le errorHandler (AppError de campayCollect)
-  }
+  // Déclencher le USSD push Campay (une erreur remonte vers le errorHandler via l'AppError de campayCollect)
+  const campayData = await campayCollect({
+    amount,
+    phone: payment_phone,
+    description: `DashMeal Pub "${title}" — ${target_count} utilisateurs`,
+    externalReference: `ad_${brandId.slice(0, 8)}_${Date.now()}`,
+    paymentMethod: payment_method,
+  });
 
   // Stocker l'intention de paiement
   const { data, error } = await supabase
@@ -219,19 +214,13 @@ export async function rejectAd(adId: string, superAdminId: string, reason: strin
 // ─── Superadmin : retrait du wallet plateforme vers téléphone ────────────────
 export async function platformWithdraw(amount: number, phone: string) {
   const description = `Retrait superadmin — ${amount.toLocaleString("fr-FR")} FCFA`;
-  let campayRef: string;
-
-  try {
-    const res = await campayWithdraw({
-      amount,
-      phone,
-      description,
-      externalReference: `platform_withdrawal_${Date.now()}`,
-    });
-    campayRef = res.reference;
-  } catch (err) {
-    throw err;
-  }
+  const res = await campayWithdraw({
+    amount,
+    phone,
+    description,
+    externalReference: `platform_withdrawal_${Date.now()}`,
+  });
+  const campayRef = res.reference;
 
   const { error } = await supabase.rpc("process_platform_withdrawal", {
     p_amount: amount,
