@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response.js";
+import { resolvePromotion, recordPromotionUsage } from "./promotions.service.js";
 
 export async function listPromotions(req: Request, res: Response, next: NextFunction) {
   try {
@@ -164,72 +165,15 @@ export async function validatePromotion(req: Request, res: Response, next: NextF
       order_total: number;
       branch_id?: string;
     };
-    const userId = req.user!.id;
-    const now = new Date().toISOString();
 
-    // Récupérer la promotion
-    const { data: promo, error } = await supabase
-      .from("promotions")
-      .select("*")
-      .eq("code", code.toUpperCase())
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (error) throw new AppError(500, "DB_ERROR", error.message);
-    if (!promo) throw new AppError(404, "PROMO_NOT_FOUND", "Code promotionnel invalide");
-
-    // Vérifier expiration
-    if (promo.expires_at && promo.expires_at < now) {
-      throw new AppError(422, "PROMO_EXPIRED", "Ce code promotionnel a expiré");
-    }
-
-    // Vérifier date de début
-    if (promo.starts_at && promo.starts_at > now) {
-      throw new AppError(422, "PROMO_NOT_STARTED", "Ce code promotionnel n'est pas encore actif");
-    }
-
-    // Vérifier restriction d'agence
-    if (promo.branch_id && branch_id && promo.branch_id !== branch_id) {
-      throw new AppError(422, "PROMO_BRANCH_MISMATCH", "Ce code n'est pas valable pour cette agence");
-    }
-
-    // Vérifier montant minimum
-    if (promo.min_order && Number(order_total) < Number(promo.min_order)) {
-      throw new AppError(422, "PROMO_MIN_ORDER", `Montant minimum requis: ${promo.min_order} FCFA`);
-    }
-
-    // Vérifier nombre max d'utilisations global
-    if (promo.max_uses !== null && Number(promo.uses_count) >= Number(promo.max_uses)) {
-      throw new AppError(422, "PROMO_MAX_USES", "Ce code promotionnel a atteint son nombre maximum d'utilisations");
-    }
-
-    // Vérifier utilisations par utilisateur
-    if (promo.max_uses_per_user !== null) {
-      const { count } = await supabase
-        .from("promotion_usages")
-        .select("id", { count: "exact", head: true })
-        .eq("promotion_id", promo.id)
-        .eq("user_id", userId);
-
-      if ((count ?? 0) >= Number(promo.max_uses_per_user)) {
-        throw new AppError(422, "PROMO_USER_LIMIT", "Vous avez déjà utilisé ce code le nombre maximum de fois autorisé");
-      }
-    }
-
-    // Calculer la réduction
-    let discount = 0;
-    if (promo.type === "percent") {
-      discount = Math.round(Number(order_total) * Number(promo.value) / 100);
-    } else {
-      discount = Math.min(Number(promo.value), Number(order_total));
-    }
-
-    sendSuccess(res, {
-      discount,
-      promotion_id: promo.id,
-      type: promo.type,
-      value: promo.value,
+    const result = await resolvePromotion({
+      code,
+      orderTotal: Number(order_total),
+      userId: req.user!.id,
+      branchId: branch_id,
     });
+
+    sendSuccess(res, result);
   } catch (err) {
     next(err);
   }
@@ -238,31 +182,8 @@ export async function validatePromotion(req: Request, res: Response, next: NextF
 export async function applyPromotion(req: Request, res: Response, next: NextFunction) {
   try {
     const { promotion_id, order_id } = req.body as { promotion_id: string; order_id: string };
-    const userId = req.user!.id;
 
-    // Vérifier que la promotion existe
-    const { data: promo, error: promoErr } = await supabase
-      .from("promotions")
-      .select("id, uses_count")
-      .eq("id", promotion_id)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (promoErr) throw new AppError(500, "DB_ERROR", promoErr.message);
-    if (!promo) throw new AppError(404, "PROMO_NOT_FOUND", "Promotion introuvable");
-
-    // Insérer usage
-    const { error: usageErr } = await supabase
-      .from("promotion_usages")
-      .insert({ promotion_id, order_id, user_id: userId, used_at: new Date().toISOString() });
-
-    if (usageErr) throw new AppError(500, "DB_ERROR", usageErr.message);
-
-    // Incrémenter uses_count
-    await supabase
-      .from("promotions")
-      .update({ uses_count: Number(promo.uses_count) + 1 })
-      .eq("id", promotion_id);
+    await recordPromotionUsage(promotion_id, order_id, req.user!.id);
 
     sendSuccess(res, null, "Promotion appliquée");
   } catch (err) {
