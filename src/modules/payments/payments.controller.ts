@@ -11,6 +11,7 @@ import {
 import { notifyOrderStatus, notifyPaymentFailed } from "../../utils/push.js";
 import { generateQrCode } from "../../utils/qrcode.js";
 import { reservePlatformStock } from "../../utils/stock.js";
+import { getDeliveryQuote } from "../../utils/deliveryFee.js";
 
 // ─── Initier un paiement AVANT création de commande ─────────────────────────
 // Flux : initier CamPay → USSD push → user confirme PIN → poll status → créer commande
@@ -45,7 +46,9 @@ export async function initiateOrderPayment(req: Request, res: Response, next: Ne
       orderItems.push({ product_id: item.product_id, quantity: item.quantity, unit_price, subtotal: sub });
     }
 
-    const delivery_fee = type === "delivery" ? 5 : 0;
+    const delivery_fee = type === "delivery"
+      ? (await getDeliveryQuote({ branch_id, lat: delivery_lat, lng: delivery_lng, subtotal })).delivery_fee
+      : 0;
     const total = subtotal + delivery_fee;
 
     console.log(`[CamPay] Préparation paiement — total: ${total} XAF, articles: ${orderItems.length}`);

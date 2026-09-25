@@ -7,6 +7,7 @@ import { campayCollect } from "../../services/campay.js";
 import { notifyOrderStatus, notifyDriversNewDelivery } from "../../utils/push.js";
 import { sendCollectQrEmail } from "../../utils/email.js";
 import { reservePlatformStock } from "../../utils/stock.js";
+import { getDeliveryQuote } from "../../utils/deliveryFee.js";
 
 // ─── Création unifiée avec items + paiement Campay ───────────────────────────
 export async function createOrder(req: Request, res: Response, next: NextFunction) {
@@ -38,7 +39,9 @@ export async function createOrder(req: Request, res: Response, next: NextFunctio
       orderItems.push({ product_id: item.product_id, variant_id: item.variant_id ?? null, quantity: item.quantity, unit_price, subtotal: sub });
     }
 
-    const delivery_fee = type === "delivery" ? 5 : 0;
+    const delivery_fee = type === "delivery"
+      ? (await getDeliveryQuote({ branch_id, lat: delivery_lat, lng: delivery_lng, subtotal })).delivery_fee
+      : 0;
     const total = subtotal + delivery_fee;
 
     // ── Créer la commande ─────────────────────────────────────────────────────
@@ -168,7 +171,7 @@ export async function createDeliveryOrder(req: Request, res: Response, next: Nex
     const { branch_id, delivery_address, delivery_lat, delivery_lng, notes, promotion_code } = req.body;
     const user_id = req.user!.id;
 
-    const order = await buildAndCreateOrder(user_id, branch_id, "delivery", notes, promotion_code);
+    const order = await buildAndCreateOrder(user_id, branch_id, "delivery", notes, promotion_code, { lat: delivery_lat, lng: delivery_lng });
 
     const { data: branch } = await supabase.from("branches").select("brand_id").eq("id", branch_id).single();
     const { error: deliveryErr } = await supabase.from("deliveries").insert({
@@ -428,7 +431,7 @@ export async function convertToDelivery(req: Request, res: Response, next: NextF
     // ── Vérifications ─────────────────────────────────────────────────────────
     const { data: order } = await supabase
       .from("orders")
-      .select("id, user_id, type, status, subtotal")
+      .select("id, user_id, branch_id, type, status, subtotal")
       .eq("id", orderId)
       .single();
 
@@ -439,7 +442,13 @@ export async function convertToDelivery(req: Request, res: Response, next: NextF
       throw new AppError(400, "CANNOT_CONVERT", "Cette commande est déjà en préparation ou livrée — conversion impossible");
     }
 
-    const delivery_fee = 5;
+    // Calculé AVANT de libérer le créneau : si l'adresse est hors zone, la commande reste en collect
+    const { delivery_fee } = await getDeliveryQuote({
+      branch_id: order.branch_id,
+      lat: delivery_lat,
+      lng: delivery_lng,
+      subtotal: Number(order.subtotal),
+    });
 
     // ── Libérer le créneau collect ────────────────────────────────────────────
     const { data: collectOrder } = await supabase
@@ -524,7 +533,8 @@ async function buildAndCreateOrder(
   branch_id: string,
   type: "collect" | "delivery",
   notes?: string,
-  promotion_code?: string
+  promotion_code?: string,
+  delivery?: { lat?: number; lng?: number }
 ) {
   const { data: cart } = await supabase
     .from("carts")
@@ -559,6 +569,10 @@ async function buildAndCreateOrder(
   // Appliquer promotion si fournie
   // TODO: valider promotion_code
 
+  const delivery_fee = type === "delivery"
+    ? (await getDeliveryQuote({ branch_id, lat: delivery?.lat, lng: delivery?.lng, subtotal })).delivery_fee
+    : 0;
+
   const { data: order, error } = await supabase
     .from("orders")
     .insert({
@@ -567,8 +581,8 @@ async function buildAndCreateOrder(
       type,
       status: "pending",
       subtotal,
-      delivery_fee: type === "delivery" ? 5 : 0,
-      total: subtotal + (type === "delivery" ? 5 : 0),
+      delivery_fee,
+      total: subtotal + delivery_fee,
       notes: notes ?? null,
     })
     .select()
