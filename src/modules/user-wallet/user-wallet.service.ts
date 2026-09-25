@@ -1,7 +1,9 @@
 import bcrypt from "bcryptjs";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
-import { campayCollect, campayWithdraw } from "../../services/campay.js";
+import { campayCollect, campayPayout } from "../../services/campay.js";
+import { computeWithdrawalFee, USER_WITHDRAWAL_FEE_RATE, USER_WITHDRAWAL_MIN_FEE } from "../../utils/walletFees.js";
+import { pageRange, paginationMeta } from "../../utils/pagination.js";
 
 const TOPUP_CALLBACK = process.env.CAMPAY_CALLBACK_URL?.replace("/payments/", "/user-wallet/") ?? "";
 
@@ -372,8 +374,7 @@ export async function initiateWithdrawal(input: {
     .single();
   if (!wallet) throw new AppError(404, "WALLET_NOT_FOUND", "Wallet introuvable");
 
-  const fee = Math.max(Math.round(input.amount * 0.02), 1);
-  const netAmount = input.amount - fee;
+  const { fee, net: netAmount } = computeWithdrawalFee(input.amount, USER_WITHDRAWAL_FEE_RATE, USER_WITHDRAWAL_MIN_FEE);
 
   if (wallet.balance < input.amount) {
     throw new AppError(400, "INSUFFICIENT_BALANCE", `Solde insuffisant. Il vous manque ${input.amount - wallet.balance} FCFA`);
@@ -393,12 +394,12 @@ export async function initiateWithdrawal(input: {
 
   // Déclencher le virement Campay vers le client
   try {
-    await campayWithdraw({
+    await campayPayout({
       amount: netAmount,
       phone: input.phone,
       description: "Retrait Wallet Dash Meal",
       externalReference: `wdraw-${input.walletId}-${Date.now()}`,
-    });
+    }, "initiateWithdrawal");
   } catch {
     // Si Campay échoue, le wallet a déjà été débité → on log mais on ne re-créditera pas ici
     // Un processus de réconciliation doit gérer ce cas en production
@@ -460,22 +461,17 @@ export async function verifyPin(walletId: string, pin: string): Promise<boolean>
 // ─── Transaction history ──────────────────────────────────────────────────────
 
 export async function getTransactions(walletId: string, page = 1, limit = 20) {
-  const from = (page - 1) * limit;
   const { data, count } = await supabase
     .from("user_wallet_transactions")
     .select("*", { count: "exact" })
     .eq("wallet_id", walletId)
     .eq("status", "completed")
     .order("created_at", { ascending: false })
-    .range(from, from + limit - 1);
+    .range(...pageRange(page, limit));
 
   return {
     transactions: data ?? [],
-    pagination: {
-      page, limit,
-      total: count ?? 0,
-      total_pages: Math.ceil((count ?? 0) / limit),
-    },
+    pagination: paginationMeta(page, limit, count ?? 0),
   };
 }
 
@@ -542,34 +538,32 @@ export async function getCommissionWallet() {
 }
 
 export async function getCommissionTransactions(page = 1, limit = 50) {
-  const from = (page - 1) * limit;
   const { data, count } = await supabase
     .from("user_wallet_transactions")
     .select("*, user:user_id(name, email)", { count: "exact" })
     .in("type", ["withdrawal", "transfer_out"])
     .gt("fee_amount", 0)
     .order("created_at", { ascending: false })
-    .range(from, from + limit - 1);
+    .range(...pageRange(page, limit));
 
   return {
     transactions: data ?? [],
-    pagination: { page, limit, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / limit) },
+    pagination: paginationMeta(page, limit, count ?? 0),
   };
 }
 
 export async function getAllUserTransactions(page = 1, limit = 50, type?: string) {
-  const from = (page - 1) * limit;
   let query = supabase
     .from("user_wallet_transactions")
     .select("*, wallet:wallet_id(card_number, card_name), user:user_id(name, email)", { count: "exact" })
     .order("created_at", { ascending: false })
-    .range(from, from + limit - 1);
+    .range(...pageRange(page, limit));
 
   if (type) query = query.eq("type", type);
 
   const { data, count } = await query;
   return {
     transactions: data ?? [],
-    pagination: { page, limit, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / limit) },
+    pagination: paginationMeta(page, limit, count ?? 0),
   };
 }

@@ -2,7 +2,8 @@ import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
-import { sendSuccess } from "../../utils/response.js";
+import { sendSuccess, sendPaginated } from "../../utils/response.js";
+import { parsePageQuery, pageRange } from "../../utils/pagination.js";
 import { campayWithdraw } from "../../services/campay.js";
 
 export const DRIVER_SHARE      = 0.70; // 70% livreur
@@ -28,24 +29,18 @@ export async function getMyWallet(req: Request, res: Response, next: NextFunctio
 // ─── GET /driver-wallet/me/transactions ──────────────────────────────────────
 export async function getMyTransactions(req: Request, res: Response, next: NextFunction) {
   try {
-    const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
-    const from  = (page - 1) * limit;
+    const { page, limit } = parsePageQuery(req.query);
 
     const { data, count, error } = await supabase
       .from("driver_wallet_transactions")
       .select("*", { count: "exact" })
       .eq("driver_id", req.user!.id)
       .order("created_at", { ascending: false })
-      .range(from, from + limit - 1);
+      .range(...pageRange(page, limit));
 
     if (error) throw new AppError(500, "DB_ERROR", error.message);
 
-    res.json({
-      success: true,
-      data: data ?? [],
-      pagination: { page, limit, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / limit) },
-    });
+    sendPaginated(res, data ?? [], count ?? 0, page, limit);
   } catch (err) {
     next(err);
   }

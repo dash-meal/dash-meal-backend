@@ -305,6 +305,25 @@ export async function campayWithdraw(params: {
 }
 
 /**
+ * Virement Mobile Money pour un retrait de wallet — renvoie la référence Campay.
+ * Les AppError (montant trop bas, refus Campay) remontent telles quelles ;
+ * toute autre erreur (réseau, parsing…) est loguée et convertie en 502 CAMPAY_ERROR.
+ */
+export async function campayPayout(
+  params: { amount: number; phone: string; description: string; externalReference: string },
+  logTag: string,
+): Promise<string> {
+  try {
+    const res = await campayWithdraw(params);
+    return res.reference;
+  } catch (err: any) {
+    if (err instanceof AppError) throw err;
+    console.error(`[${logTag}] Erreur virement:`, err);
+    throw new AppError(502, "CAMPAY_ERROR", "Une erreur est survenue, veuillez contacter le support.");
+  }
+}
+
+/**
  * Lookup subscriber name for a phone number.
  * Returns null if Campay doesn't support it or the lookup fails.
  */
