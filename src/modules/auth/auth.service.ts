@@ -6,6 +6,7 @@ import { sendOtp, verifyOtp, verifyEmailOtp } from "../../utils/otp.js";
 import { sendEmailOtp, sendCodeByEmail } from "../../utils/email.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { env } from "../../config/env.js";
+import { escapePostgrestValue } from "../../utils/postgrest.js";
 import type {
   RegisterUserInput,
   LoginUserInput,
@@ -359,7 +360,7 @@ export async function registerSuperAdmin(input: {
   const { data: existing, error: existingError } = await supabase
     .from("super_admins")
     .select("id")
-    .or(`email.eq.${email},phone.eq.${phone}`)
+    .or(`email.eq.${escapePostgrestValue(email)},phone.eq.${escapePostgrestValue(phone)}`)
     .maybeSingle();
 
   if (existingError) {
@@ -537,7 +538,7 @@ export async function applyBrand(input: {
   const { data: existing } = await supabase
     .from("brand_applications")
     .select("id")
-    .or(`contact_email.eq.${contact_email},contact_phone.eq.${contact_phone}`)
+    .or(`contact_email.eq.${escapePostgrestValue(contact_email)},contact_phone.eq.${escapePostgrestValue(contact_phone)}`)
     .maybeSingle();
 
   if (existing) {

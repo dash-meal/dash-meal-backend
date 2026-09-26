@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated } from "../../utils/response.js";
+import { escapePostgrestValue } from "../../utils/postgrest.js";
 
 // ─── Admins ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,9 @@ export async function createAdmin(req: Request, res: Response, next: NextFunctio
     const { data: existing } = await supabase
       .from("admins")
       .select("id")
-      .or(`email.eq.${email},phone.eq.${phone},username.eq.${username}`)
+      .or(
+        `email.eq.${escapePostgrestValue(email)},phone.eq.${escapePostgrestValue(phone)},username.eq.${escapePostgrestValue(username)}`
+      )
       .single();
 
     if (existing) {
