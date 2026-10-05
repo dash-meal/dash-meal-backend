@@ -1,6 +1,6 @@
 ﻿import { Router } from "express";
 import multer from "multer";
-import { authenticate, requireRole } from "../../middleware/auth.js";
+import { authenticate, requireRole, loadBranchOwnership, requireOwnBrand } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { CreateBranchSchema, UpdateBranchSchema, CreateDeliveryZoneSchema } from "../../shared/index.js";
 import * as controller from "./branches.controller.js";
@@ -19,8 +19,8 @@ router.get("/", authenticate, requireRole("admin", "superadmin"), controller.lis
 
 // ─── Admin : CRUD agences ─────────────────────────────────────────────────────
 router.post("/", authenticate, requireRole("admin", "superadmin"), validate(CreateBranchSchema), controller.createBranch);
-router.patch("/:id", authenticate, requireRole("admin", "superadmin"), validate(UpdateBranchSchema), controller.updateBranch);
-router.delete("/:id", authenticate, requireRole("admin", "superadmin"), controller.deleteBranch);
+router.patch("/:id", authenticate, requireRole("admin", "superadmin"), loadBranchOwnership, requireOwnBrand, validate(UpdateBranchSchema), controller.updateBranch);
+router.delete("/:id", authenticate, requireRole("admin", "superadmin"), loadBranchOwnership, requireOwnBrand, controller.deleteBranch);
 
 // ─── Image agence ─────────────────────────────────────────────────────────────
 router.post("/:id/image", authenticate, requireRole("admin", "superadmin"), upload.single("image"), controller.uploadBranchImage);

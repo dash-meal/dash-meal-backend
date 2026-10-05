@@ -1,6 +1,6 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import multer from "multer";
-import { authenticate, requireRole } from "../../middleware/auth.js";
+import { authenticate, requireRole, loadBrandFromParam, requireOwnBrand } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { BrandApplicationSchema, ReviewApplicationSchema, CreateBrandSchema } from "../../shared/index.js";
 import * as controller from "./brands.controller.js";
@@ -22,10 +22,10 @@ router.patch("/:id/suspend", authenticate, requireRole("superadmin"), controller
 router.post("/:id/review-legal", authenticate, requireRole("superadmin"), controller.reviewLegalDocs);
 
 // ─── Admin (sa propre marque) ─────────────────────────────────────────────────
-router.get("/:id", authenticate, requireRole("admin", "superadmin"), controller.getBrand);
-router.patch("/:id", authenticate, requireRole("admin", "superadmin"), controller.updateBrand);
-router.post("/:id/logo", authenticate, requireRole("admin", "superadmin"), upload.single("logo"), controller.uploadBrandLogo);
-router.post("/:id/legal-doc", authenticate, requireRole("admin", "superadmin"), upload.single("document"), controller.uploadLegalDoc);
-router.post("/:id/submit-legal", authenticate, requireRole("admin"), controller.submitLegalDocs);
+router.get("/:id", authenticate, requireRole("admin", "superadmin"), loadBrandFromParam("id"), requireOwnBrand, controller.getBrand);
+router.patch("/:id", authenticate, requireRole("admin", "superadmin"), loadBrandFromParam("id"), requireOwnBrand, controller.updateBrand);
+router.post("/:id/logo", authenticate, requireRole("admin", "superadmin"), loadBrandFromParam("id"), requireOwnBrand, upload.single("logo"), controller.uploadBrandLogo);
+router.post("/:id/legal-doc", authenticate, requireRole("admin", "superadmin"), loadBrandFromParam("id"), requireOwnBrand, upload.single("document"), controller.uploadLegalDoc);
+router.post("/:id/submit-legal", authenticate, requireRole("admin"), loadBrandFromParam("id"), requireOwnBrand, controller.submitLegalDocs);
 
 export default router;

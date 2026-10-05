@@ -3,6 +3,7 @@ import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess } from "../../utils/response.js";
 import { env } from "../../config/env.js";
+import { assertBranchOwnership } from "../../middleware/auth.js";
 
 async function sendPushToUser(userId: string, title: string, body: string, data?: Record<string, unknown>) {
   try {
@@ -73,7 +74,7 @@ export async function scanQrCode(req: Request, res: Response, next: NextFunction
       .select(`
         *,
         orders(
-          id, status, total, user_id,
+          id, status, total, user_id, branch_id,
           users(name, phone),
           order_items(quantity, unit_price, products(name_fr)),
           time_slots(date, start_time, end_time)
@@ -87,6 +88,11 @@ export async function scanQrCode(req: Request, res: Response, next: NextFunction
     }
 
     const order = collect.orders as Record<string, unknown>;
+
+    // Vérifier que la commande appartient bien à l'agence/la marque de
+    // l'utilisateur qui scanne (un admin/branch_manager ne doit pouvoir
+    // valider un retrait que pour sa propre marque/agence).
+    await assertBranchOwnership(req.user, order.branch_id as string | undefined);
 
     // Vérifier que la commande est prête
     if (order.status !== "ready") {

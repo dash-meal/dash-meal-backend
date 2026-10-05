@@ -29,14 +29,8 @@ export async function setBranchHours(req: Request, res: Response, next: NextFunc
       day_of_week: number; open_time: string; close_time: string; is_closed: boolean;
     }>;
 
-    // Vérification accès
-    if (req.user!.role === "branch_manager" && req.user!.branch_id !== branch_id) {
-      throw new AppError(403, "FORBIDDEN", "Accès refusé à cette agence");
-    }
-    if (req.user!.role === "admin") {
-      const { data: branch } = await supabase.from("branches").select("brand_id").eq("id", branch_id).single();
-      if (!branch || branch.brand_id !== req.user!.brand_id) throw new AppError(403, "FORBIDDEN", "Accès refusé");
-    }
+    // Accès vérifié en amont par loadBrandFromBranchParam + requireBranchAccess
+    // + requireOwnBrand (voir branch-hours.routes.ts)
 
     const rows = hours.map((h) => ({
       branch_id,

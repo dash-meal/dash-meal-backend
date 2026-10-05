@@ -1,7 +1,10 @@
-﻿import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
+import { supabase } from "../config/supabase.js";
+import { AppError } from "./errorHandler.js";
 import type { AuthUser } from "../shared/index.js";
+import { isTokenRevoked } from "../utils/tokenBlacklist.js";
 
 // Augmenter le type Request pour inclure l'utilisateur authentifié
 declare global {
@@ -23,6 +26,14 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   const token = authHeader.slice(7);
+  if (isTokenRevoked(token)) {
+    res.status(401).json({
+      success: false,
+      error: { code: "TOKEN_REVOKED", message: "Session révoquée ou déconnectée" },
+    });
+    return;
+  }
+
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthUser;
     req.user = payload;
@@ -60,6 +71,7 @@ export function optionalAuthenticate(req: Request, res: Response, next: NextFunc
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return next();
   const token = authHeader.slice(7);
+  if (isTokenRevoked(token)) return next();
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthUser;
     req.user = payload;
@@ -109,4 +121,205 @@ export function requireOwnBrand(req: Request, res: Response, next: NextFunction)
     return;
   }
   next();
+}
+
+// ─── Résolution de propriétaire pour les routes basées sur :id ───────────────
+//
+// requireBranchAccess / requireOwnBrand lisent branchId/brandId depuis
+// req.params.branchId|brandId ou req.body.branch_id|brand_id. Sur les routes
+// du type /orders/:id/status ou /branches/:id, le seul identifiant présent
+// dans l'URL est celui de la ressource elle-même (commande, agence) — pas sa
+// marque ou son agence propriétaire. Ces deux middlewares vont chercher cette
+// info en base et l'injectent dans req.params, pour que requireBranchAccess
+// et requireOwnBrand puissent ensuite s'appliquer normalement.
+//
+// À placer APRÈS authenticate/requireRole et AVANT requireBranchAccess /
+// requireOwnBrand dans la chaîne de middlewares.
+
+// Résout branch_id et brand_id d'une commande depuis req.params.id
+export const loadOrderOwnership = loadOrderOwnershipFromParam("id");
+
+// Version générique : même résolution que loadOrderOwnership, mais pour un
+// nom de paramètre d'URL différent (ex: "orderId" sur /collect/admin/order/:orderId).
+export function loadOrderOwnershipFromParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orderId = req.params[paramName];
+      if (!orderId) {
+        next(new AppError(400, "MISSING_ORDER_ID", "Identifiant de commande requis"));
+        return;
+      }
+
+      const { data: order, error } = await supabase
+        .from("orders")
+        .select("branch_id, branches(brand_id)")
+        .eq("id", orderId)
+        .single();
+
+      if (error || !order) {
+        next(new AppError(404, "NOT_FOUND", "Commande introuvable"));
+        return;
+      }
+
+      if (order.branch_id) req.params.branchId = order.branch_id;
+      const brandId = (order.branches as { brand_id?: string } | null)?.brand_id;
+      if (brandId) req.params.brandId = brandId;
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// Résout brand_id d'une agence depuis req.params.id
+export const loadBranchOwnership = loadBrandFromBranchParam("id");
+
+// Version générique : résout brand_id d'une agence depuis n'importe quel nom
+// de paramètre d'URL (ex: "branch_id" sur /branch-hours/:branch_id,
+// "branchId" sur /collect/branch/:branchId, "id" sur /branches/:id...).
+// Injecte le résultat dans req.params.brandId pour requireOwnBrand.
+export function loadBrandFromBranchParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const branchId = req.params[paramName];
+      if (!branchId) {
+        next(new AppError(400, "MISSING_BRANCH_ID", "Identifiant d'agence requis"));
+        return;
+      }
+
+      const { data: branch, error } = await supabase
+        .from("branches")
+        .select("brand_id")
+        .eq("id", branchId)
+        .single();
+
+      if (error || !branch) {
+        next(new AppError(404, "NOT_FOUND", "Agence introuvable"));
+        return;
+      }
+
+      if (branch.brand_id) req.params.brandId = branch.brand_id;
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// Résout brand_id et branch_id d'un produit depuis req.params.id
+export const loadProductOwnership = loadProductOwnershipFromParam("id");
+
+// Version générique : résout brand_id et branch_id d'un produit depuis un nom de paramètre
+export function loadProductOwnershipFromParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const productId = req.params[paramName];
+      if (!productId) {
+        next(new AppError(400, "MISSING_PRODUCT_ID", "Identifiant de produit requis"));
+        return;
+      }
+
+      const { data: product, error } = await supabase
+        .from("products")
+        .select("branch_id, brand_id, branches(brand_id)")
+        .eq("id", productId)
+        .single();
+
+      if (error || !product) {
+        next(new AppError(404, "NOT_FOUND", "Produit introuvable"));
+        return;
+      }
+
+      if (product.branch_id) req.params.branchId = product.branch_id;
+      const brandId = product.brand_id ?? (product.branches as { brand_id?: string } | null)?.brand_id;
+      if (brandId) req.params.brandId = brandId;
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// Résout brand_id et branch_id d'un code promo depuis req.params.id
+export const loadPromoCodeOwnership = loadPromoCodeOwnershipFromParam("id");
+
+// Version générique : résout brand_id et branch_id d'un code promo depuis un nom de paramètre
+export function loadPromoCodeOwnershipFromParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promoId = req.params[paramName];
+      if (!promoId) {
+        next(new AppError(400, "MISSING_PROMO_ID", "Identifiant de code promo requis"));
+        return;
+      }
+
+      const { data: promo, error } = await supabase
+        .from("promo_codes")
+        .select("branch_id, branches(brand_id)")
+        .eq("id", promoId)
+        .single();
+
+      if (error || !promo) {
+        next(new AppError(404, "NOT_FOUND", "Code promo introuvable"));
+        return;
+      }
+
+      if (promo.branch_id) req.params.branchId = promo.branch_id;
+      const brandId = (promo.branches as { brand_id?: string } | null)?.brand_id;
+      if (brandId) req.params.brandId = brandId;
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// Version directe : injecte req.params[paramName] dans req.params.brandId (pour les routes /brands/:id)
+export function loadBrandFromParam(paramName = "id") {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const brandId = req.params[paramName];
+    if (brandId) {
+      req.params.brandId = brandId;
+    }
+    next();
+  };
+}
+
+// ─── Vérification manuelle (hors chaîne de middlewares) ───────────────────────
+//
+// Certaines ressources ne sont identifiables qu'après une requête en base
+// (ex: /collect/scan résout la commande à partir d'un qr_code envoyé dans le
+// body — aucun branchId n'est disponible dans l'URL avant cette requête).
+// Dans ces cas, un middleware de route ne peut pas s'appliquer : on vérifie
+// l'accès directement dans le controller, une fois la ressource chargée.
+//
+// Lève une AppError (401/403) — à laisser remonter via le bloc try/catch +
+// next(err) déjà présent dans les controllers de ce projet.
+export async function assertBranchOwnership(
+  user: AuthUser | undefined,
+  branchId: string | null | undefined
+): Promise<void> {
+  if (!user) throw new AppError(401, "UNAUTHORIZED", "Non authentifié");
+  if (user.role === "superadmin") return;
+
+  if (user.role === "admin") {
+    if (!branchId) throw new AppError(403, "FORBIDDEN", "Accès refusé");
+    const { data: branch } = await supabase.from("branches").select("brand_id").eq("id", branchId).single();
+    if (!branch || branch.brand_id !== user.brand_id) {
+      throw new AppError(403, "FORBIDDEN", "Accès refusé à cette agence");
+    }
+    return;
+  }
+
+  if (user.role === "branch_manager") {
+    if (!branchId || branchId !== user.branch_id) {
+      throw new AppError(403, "BRANCH_ACCESS_DENIED", "Accès refusé à cette agence");
+    }
+    return;
+  }
+
+  throw new AppError(403, "FORBIDDEN", "Accès refusé");
 }

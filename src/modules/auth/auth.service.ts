@@ -1,4 +1,4 @@
-﻿import bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs";
 import axios from "axios";
 import { supabase } from "../../config/supabase.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt.js";
@@ -6,6 +6,8 @@ import { sendOtp, verifyOtp, verifyEmailOtp } from "../../utils/otp.js";
 import { sendEmailOtp, sendCodeByEmail } from "../../utils/email.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { env } from "../../config/env.js";
+import { escapePostgrestValue } from "../../utils/postgrest.js";
+import { isTokenRevoked, revokeToken } from "../../utils/tokenBlacklist.js";
 import type {
   RegisterUserInput,
   LoginUserInput,
@@ -349,17 +351,53 @@ export async function verifySuperAdminOtp(input: { identifier: string; code: str
   return { admin: safeSuperAdmin, tokens };
 }
 
-export async function registerSuperAdmin(input: {
-  email: string;
-  phone: string;
-  password: string;
-}): Promise<{ admin: object; tokens: AuthTokens }> {
-  const { email, phone, password } = input;
+export function revokeTokenSession(token: string): void {
+  revokeToken(token);
+}
+
+export async function registerSuperAdmin(
+  input: {
+    email: string;
+    phone: string;
+    password: string;
+    bootstrap_secret?: string;
+  },
+  requestingUser?: { id: string; role: string }
+): Promise<{ admin: object; tokens: AuthTokens }> {
+  const { email, phone, password, bootstrap_secret } = input;
+
+  // 1. Vérifier si un compte superadmin existe déjà
+  const { count, error: countErr } = await supabase
+    .from("super_admins")
+    .select("id", { count: "exact", head: true });
+
+  if (countErr) {
+    throw new AppError(500, "SUPERADMIN_LOOKUP_ERROR", "Erreur de vérification superadmin");
+  }
+
+  const hasSuperAdmin = (count ?? 0) > 0;
+
+  // Si au moins un superadmin existe : seul un superadmin authentifié peut créer un nouveau compte
+  // ou un secret d'amorçage valide (SUPERADMIN_BOOTSTRAP_SECRET)
+  if (hasSuperAdmin) {
+    const isSuperAdminCaller = requestingUser?.role === "superadmin";
+    const isValidSecret = !!env.SUPERADMIN_BOOTSTRAP_SECRET && bootstrap_secret === env.SUPERADMIN_BOOTSTRAP_SECRET;
+
+    if (!isSuperAdminCaller && !isValidSecret) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "Création de superadmin interdite. Seul un superadmin peut créer un autre compte."
+      );
+    }
+  } else if (env.SUPERADMIN_BOOTSTRAP_SECRET && bootstrap_secret !== env.SUPERADMIN_BOOTSTRAP_SECRET) {
+    throw new AppError(403, "INVALID_BOOTSTRAP_SECRET", "Secret d'amorçage superadmin invalide");
+  }
 
   const { data: existing, error: existingError } = await supabase
     .from("super_admins")
     .select("id")
-    .or(`email.eq.${email},phone.eq.${phone}`)
+    .or(`email.eq.${escapePostgrestValue(email)},phone.eq.${escapePostgrestValue(phone)}`)
     .maybeSingle();
 
   if (existingError) {
@@ -388,6 +426,10 @@ export async function registerSuperAdmin(input: {
 }
 
 export async function refreshTokens(refreshToken: string): Promise<AuthTokens> {
+  if (isTokenRevoked(refreshToken)) {
+    throw new AppError(401, "TOKEN_REVOKED", "Session révoquée ou déconnectée");
+  }
+
   let payload: { id: string; role: string };
   try {
     payload = verifyRefreshToken(refreshToken);
@@ -537,7 +579,7 @@ export async function applyBrand(input: {
   const { data: existing } = await supabase
     .from("brand_applications")
     .select("id")
-    .or(`contact_email.eq.${contact_email},contact_phone.eq.${contact_phone}`)
+    .or(`contact_email.eq.${escapePostgrestValue(contact_email)},contact_phone.eq.${escapePostgrestValue(contact_phone)}`)
     .maybeSingle();
 
   if (existing) {

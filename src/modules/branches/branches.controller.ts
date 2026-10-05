@@ -1,4 +1,4 @@
-﻿import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated } from "../../utils/response.js";
@@ -166,31 +166,54 @@ export async function createBranch(req: Request, res: Response, next: NextFuncti
       ? req.body.brand_id
       : req.user!.brand_id;
 
-    const branchType: BranchType = req.body.type ?? "other";
-
-    // Si vertical_id n'est pas fourni explicitement, le résoudre depuis `type`
-    // (garde le comportement existant du frontend qui n'envoie que `type`).
     let vertical_id = req.body.vertical_id as string | undefined;
-    if (!vertical_id) {
+    let branchType: string = req.body.type ?? "other";
+
+    // Si vertical_id est fourni explicitement, récupérer son key pour les catégories par défaut
+    if (vertical_id) {
       const { data: vertical } = await supabase
         .from("branch_verticals")
-        .select("id")
+        .select("id, key")
+        .eq("id", vertical_id)
+        .maybeSingle();
+
+      if (vertical && !req.body.type) {
+        branchType = vertical.key;
+      }
+    } else {
+      // Sinon résoudre vertical_id depuis `type`
+      const { data: vertical } = await supabase
+        .from("branch_verticals")
+        .select("id, key")
         .eq("key", branchType)
         .maybeSingle();
+
       vertical_id = vertical?.id;
+
+      // Fallback sur le vertical "other" si le type demandé n'existe pas en base
+      if (!vertical_id) {
+        const { data: fallbackVertical } = await supabase
+          .from("branch_verticals")
+          .select("id, key")
+          .eq("key", "other")
+          .maybeSingle();
+        vertical_id = fallbackVertical?.id;
+      }
     }
 
     const { data, error } = await supabase
       .from("branches")
-      .insert({ ...req.body, brand_id, vertical_id, status: "draft" })
+      .insert({ ...req.body, type: branchType, brand_id, vertical_id, status: "draft" })
       .select()
       .single();
 
     if (error || !data) throw new AppError(500, "CREATE_ERROR", "Échec de création");
 
-    // Créer les catégories par défaut selon le type d'établissement
-    const defaultCats = DEFAULT_CATEGORIES[branchType] ?? DEFAULT_CATEGORIES.other;
-    if (defaultCats.length > 0) {
+    // Créer les catégories par défaut selon le type (fallback sur other si type non répertorié)
+    const defaultCats = (branchType in DEFAULT_CATEGORIES)
+      ? DEFAULT_CATEGORIES[branchType as BranchType]
+      : DEFAULT_CATEGORIES.other;
+    if (defaultCats && defaultCats.length > 0) {
       await supabase.from("categories").insert(
         defaultCats.map((c) => ({ ...c, branch_id: data.id }))
       );

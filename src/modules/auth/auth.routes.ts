@@ -1,5 +1,6 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import { validate } from "../../middleware/validate.js";
+import { authenticate, optionalAuthenticate } from "../../middleware/auth.js";
 import {
   RegisterUserSchema,
   LoginUserSchema,
@@ -73,11 +74,13 @@ const StrongPassword = z.string()
 
 router.post(
   "/superadmin/register",
+  optionalAuthenticate,
   validate(
     z.object({
       email: z.string().email(),
       phone: z.string().regex(/^\+?[1-9]\d{7,14}$/),
       password: StrongPassword,
+      bootstrap_secret: z.string().optional(),
     })
   ),
   controller.registerSuperAdmin
@@ -108,5 +111,6 @@ router.post(
 
 // ─── Commun ───────────────────────────────────────────────────────────────────
 router.post("/refresh", validate(RefreshTokenSchema), controller.refreshTokens);
+router.post("/logout", authenticate, controller.logout);
 
 export default router;
