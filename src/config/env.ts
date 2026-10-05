@@ -68,8 +68,6 @@ const EnvSchema = z.object({
   STORAGE_BUCKET_DOCUMENTS: z.string().default("brand-documents"),
   STORAGE_BUCKET_INVOICES: z.string().default("invoices"),
   STORAGE_BUCKET_ADS: z.string().default("ad-images"),
-
-  SUPERADMIN_BOOTSTRAP_SECRET: z.string().optional(),
 });
 
 function loadEnv() {

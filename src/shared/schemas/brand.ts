@@ -50,7 +50,7 @@ export const CreateBranchSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   phone: z.string().optional(),
-  type: z.string().min(2).max(50).default("other"),
+  type: z.enum(BRANCH_TYPES).default("other"),
   vertical_id: z.string().uuid().optional(),
   opening_hours: OpeningHoursSchema.optional(),
 });

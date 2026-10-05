@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, requireRole, loadBrandFromBranchParam, requireBranchAccess, requireOwnBrand } from "../../middleware/auth.js";
+import { authenticate, requireRole } from "../../middleware/auth.js";
 import * as controller from "./analytics.controller.js";
 
 const router: import("express").Router = Router();
@@ -12,12 +12,7 @@ router.get("/top-products", authenticate, requireRole("admin", "superadmin", "br
 router.get("/revenue",      authenticate, requireRole("admin", "superadmin", "branch_manager"), controller.getRevenue);
 
 // ─── Analytiques par agence ───────────────────────────────────────────────────
-router.get(
-  "/branch/:branch_id",
-  authenticate, requireRole("admin", "superadmin", "branch_manager"),
-  loadBrandFromBranchParam("branch_id"), requireBranchAccess, requireOwnBrand,
-  controller.getBranchStats
-);
+router.get("/branch/:branch_id", authenticate, requireRole("admin", "superadmin", "branch_manager"), controller.getBranchStats);
 
 // ─── Super Admin uniquement ───────────────────────────────────────────────────
 router.get("/platform",    authenticate, requireRole("superadmin"), controller.getPlatformStats);
