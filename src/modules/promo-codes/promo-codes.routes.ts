@@ -1,5 +1,11 @@
 import { Router } from "express";
-import { authenticate, requireRole } from "../../middleware/auth.js";
+import {
+  authenticate,
+  requireRole,
+  loadPromoCodeOwnership,
+  requireBranchAccess,
+  requireOwnBrand,
+} from "../../middleware/auth.js";
 import * as controller from "./promo-codes.controller.js";
 
 const router: import("express").Router = Router();
@@ -10,7 +16,7 @@ router.get("/validate", controller.validatePromoCode);
 // ─── Admin ────────────────────────────────────────────────────────────────────
 router.get(  "/",    authenticate, requireRole("admin", "superadmin"), controller.listPromoCodes);
 router.post( "/",    authenticate, requireRole("admin", "superadmin"), controller.createPromoCode);
-router.patch("/:id", authenticate, requireRole("admin", "superadmin"), controller.updatePromoCode);
-router.delete("/:id", authenticate, requireRole("admin", "superadmin"), controller.deletePromoCode);
+router.patch("/:id", authenticate, requireRole("admin", "superadmin"), loadPromoCodeOwnership, requireBranchAccess, requireOwnBrand, controller.updatePromoCode);
+router.delete("/:id", authenticate, requireRole("admin", "superadmin"), loadPromoCodeOwnership, requireBranchAccess, requireOwnBrand, controller.deletePromoCode);
 
 export default router;

@@ -1,9 +1,10 @@
-﻿import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { supabase } from "../config/supabase.js";
 import { AppError } from "./errorHandler.js";
 import type { AuthUser } from "../shared/index.js";
+import { isTokenRevoked } from "../utils/tokenBlacklist.js";
 
 // Augmenter le type Request pour inclure l'utilisateur authentifié
 declare global {
@@ -25,6 +26,14 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   const token = authHeader.slice(7);
+  if (isTokenRevoked(token)) {
+    res.status(401).json({
+      success: false,
+      error: { code: "TOKEN_REVOKED", message: "Session révoquée ou déconnectée" },
+    });
+    return;
+  }
+
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthUser;
     req.user = payload;
@@ -62,6 +71,7 @@ export function optionalAuthenticate(req: Request, res: Response, next: NextFunc
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) return next();
   const token = authHeader.slice(7);
+  if (isTokenRevoked(token)) return next();
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthUser;
     req.user = payload;
@@ -194,6 +204,87 @@ export function loadBrandFromBranchParam(paramName: string) {
     } catch (err) {
       next(err);
     }
+  };
+}
+
+// Résout brand_id et branch_id d'un produit depuis req.params.id
+export const loadProductOwnership = loadProductOwnershipFromParam("id");
+
+// Version générique : résout brand_id et branch_id d'un produit depuis un nom de paramètre
+export function loadProductOwnershipFromParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const productId = req.params[paramName];
+      if (!productId) {
+        next(new AppError(400, "MISSING_PRODUCT_ID", "Identifiant de produit requis"));
+        return;
+      }
+
+      const { data: product, error } = await supabase
+        .from("products")
+        .select("branch_id, brand_id, branches(brand_id)")
+        .eq("id", productId)
+        .single();
+
+      if (error || !product) {
+        next(new AppError(404, "NOT_FOUND", "Produit introuvable"));
+        return;
+      }
+
+      if (product.branch_id) req.params.branchId = product.branch_id;
+      const brandId = product.brand_id ?? (product.branches as { brand_id?: string } | null)?.brand_id;
+      if (brandId) req.params.brandId = brandId;
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// Résout brand_id et branch_id d'un code promo depuis req.params.id
+export const loadPromoCodeOwnership = loadPromoCodeOwnershipFromParam("id");
+
+// Version générique : résout brand_id et branch_id d'un code promo depuis un nom de paramètre
+export function loadPromoCodeOwnershipFromParam(paramName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promoId = req.params[paramName];
+      if (!promoId) {
+        next(new AppError(400, "MISSING_PROMO_ID", "Identifiant de code promo requis"));
+        return;
+      }
+
+      const { data: promo, error } = await supabase
+        .from("promo_codes")
+        .select("branch_id, branches(brand_id)")
+        .eq("id", promoId)
+        .single();
+
+      if (error || !promo) {
+        next(new AppError(404, "NOT_FOUND", "Code promo introuvable"));
+        return;
+      }
+
+      if (promo.branch_id) req.params.branchId = promo.branch_id;
+      const brandId = (promo.branches as { brand_id?: string } | null)?.brand_id;
+      if (brandId) req.params.brandId = brandId;
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+// Version directe : injecte req.params[paramName] dans req.params.brandId (pour les routes /brands/:id)
+export function loadBrandFromParam(paramName = "id") {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const brandId = req.params[paramName];
+    if (brandId) {
+      req.params.brandId = brandId;
+    }
+    next();
   };
 }
 

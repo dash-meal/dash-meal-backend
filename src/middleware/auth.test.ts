@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Request, Response, NextFunction } from "express";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
@@ -23,14 +23,19 @@ vi.mock("../config/env.js", () => ({
 }));
 
 const {
+  authenticate,
   requireOwnBrand,
   requireBranchAccess,
   loadOrderOwnership,
   loadOrderOwnershipFromParam,
   loadBranchOwnership,
   loadBrandFromBranchParam,
+  loadProductOwnership,
+  loadPromoCodeOwnership,
+  loadBrandFromParam,
   assertBranchOwnership,
 } = await import("./auth.js");
+const { revokeToken, clearTokenBlacklist } = await import("../utils/tokenBlacklist.js");
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -499,3 +504,122 @@ describe("assertBranchOwnership", () => {
     ).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
   });
 });
+
+// ─── loadProductOwnership ───────────────────────────────────────────────────
+
+describe("loadProductOwnership", () => {
+  it("rejette 400 si l'id du produit est absent des params", async () => {
+    const req = mockReq({ params: {} });
+    const res = mockRes();
+    const next = vi.fn() as unknown as NextFunction;
+
+    await loadProductOwnership(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: 400, code: "MISSING_PRODUCT_ID" })
+    );
+  });
+
+  it("rejette 404 si le produit n'existe pas", async () => {
+    singleMock.mockResolvedValueOnce({ data: null, error: { message: "Not found" } });
+    const req = mockReq({ params: { id: "prod-999" } });
+    const res = mockRes();
+    const next = vi.fn() as unknown as NextFunction;
+
+    await loadProductOwnership(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: 404, code: "NOT_FOUND" })
+    );
+  });
+
+  it("injecte brandId et branchId dans req.params si le produit est trouvé", async () => {
+    singleMock.mockResolvedValueOnce({
+      data: { branch_id: "branch-1", brand_id: "brand-1", branches: { brand_id: "brand-1" } },
+      error: null,
+    });
+    const req = mockReq({ params: { id: "prod-1" } });
+    const res = mockRes();
+    const next = vi.fn() as unknown as NextFunction;
+
+    await loadProductOwnership(req, res, next);
+
+    expect(req.params.branchId).toBe("branch-1");
+    expect(req.params.brandId).toBe("brand-1");
+    expect(next).toHaveBeenCalledWith();
+  });
+});
+
+// ─── loadPromoCodeOwnership ─────────────────────────────────────────────────
+
+describe("loadPromoCodeOwnership", () => {
+  it("rejette 400 si l'id de promo est absent", async () => {
+    const req = mockReq({ params: {} });
+    const res = mockRes();
+    const next = vi.fn() as unknown as NextFunction;
+
+    await loadPromoCodeOwnership(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: 400, code: "MISSING_PROMO_ID" })
+    );
+  });
+
+  it("injecte brandId et branchId depuis l'agence liée au code promo", async () => {
+    singleMock.mockResolvedValueOnce({
+      data: { branch_id: "branch-promo", branches: { brand_id: "brand-promo" } },
+      error: null,
+    });
+    const req = mockReq({ params: { id: "promo-1" } });
+    const res = mockRes();
+    const next = vi.fn() as unknown as NextFunction;
+
+    await loadPromoCodeOwnership(req, res, next);
+
+    expect(req.params.branchId).toBe("branch-promo");
+    expect(req.params.brandId).toBe("brand-promo");
+    expect(next).toHaveBeenCalledWith();
+  });
+});
+
+// ─── loadBrandFromParam ─────────────────────────────────────────────────────
+
+describe("loadBrandFromParam", () => {
+  it("injecte req.params.id dans req.params.brandId", () => {
+    const req = mockReq({ params: { id: "brand-target" } });
+    const res = mockRes();
+    const next = vi.fn() as unknown as NextFunction;
+
+    loadBrandFromParam("id")(req, res, next);
+
+    expect(req.params.brandId).toBe("brand-target");
+    expect(next).toHaveBeenCalledWith();
+  });
+});
+
+// ─── authenticate avec révocation de token ──────────────────────────────────
+
+describe("authenticate & token revocation", () => {
+  beforeEach(() => {
+    clearTokenBlacklist();
+  });
+
+  it("bloque un token révoqué avec code TOKEN_REVOKED", () => {
+    const testToken = "sample.revoked.jwt.token";
+    revokeToken(testToken);
+
+    const req = mockReq({ headers: { authorization: `Bearer ${testToken}` } });
+    const res = mockRes();
+    const next = vi.fn() as unknown as NextFunction;
+
+    authenticate(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: { code: "TOKEN_REVOKED", message: "Session révoquée ou déconnectée" },
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+});
+
