@@ -1,13 +1,6 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import multer from "multer";
-import {
-  authenticate,
-  requireRole,
-  optionalAuthenticate,
-  loadProductOwnership,
-  requireBranchAccess,
-  requireOwnBrand,
-} from "../../middleware/auth.js";
+import { authenticate, requireRole, optionalAuthenticate } from "../../middleware/auth.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 import { validate } from "../../middleware/validate.js";
@@ -42,17 +35,17 @@ router.get("/branch/:branch_id", optionalAuthenticate, controller.listByBranch);
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 router.post("/", authenticate, requireRole("admin", "superadmin"), validate(CreateProductSchema), controller.createProduct);
-router.patch("/:id", authenticate, requireRole("admin", "superadmin"), loadProductOwnership, requireBranchAccess, requireOwnBrand, validate(UpdateProductSchema), controller.updateProduct);
-router.patch("/:id/toggle-hidden", authenticate, requireRole("admin", "superadmin"), loadProductOwnership, requireBranchAccess, requireOwnBrand, controller.toggleHidden);
-router.patch("/:id/promo", authenticate, requireRole("admin", "superadmin"), loadProductOwnership, requireBranchAccess, requireOwnBrand, validate(SetPromoSchema), controller.setPromo);
-router.delete("/:id", authenticate, requireRole("admin", "superadmin"), loadProductOwnership, requireBranchAccess, requireOwnBrand, controller.deleteProduct);
+router.patch("/:id", authenticate, requireRole("admin", "superadmin"), validate(UpdateProductSchema), controller.updateProduct);
+router.patch("/:id/toggle-hidden", authenticate, requireRole("admin", "superadmin"), controller.toggleHidden);
+router.patch("/:id/promo", authenticate, requireRole("admin", "superadmin"), validate(SetPromoSchema), controller.setPromo);
+router.delete("/:id", authenticate, requireRole("admin", "superadmin"), controller.deleteProduct);
 
 // Variantes
-router.post("/:id/variants", authenticate, requireRole("admin", "superadmin"), loadProductOwnership, requireBranchAccess, requireOwnBrand, validate(CreateProductVariantSchema), controller.createVariant);
+router.post("/:id/variants", authenticate, requireRole("admin", "superadmin"), validate(CreateProductVariantSchema), controller.createVariant);
 
 // Stock par agence
 router.put("/stock", authenticate, requireRole("admin", "superadmin"), validate(UpdateStockSchema), controller.updateStock);
-router.get("/:id/stock", authenticate, requireRole("admin", "superadmin"), loadProductOwnership, requireBranchAccess, requireOwnBrand, controller.getStockByBranch);
+router.get("/:id/stock", authenticate, requireRole("admin", "superadmin"), controller.getStockByBranch);
 
 // Upload image produit
 router.post("/upload-image", authenticate, requireRole("admin", "superadmin"), upload.single("image"), controller.uploadImage);

@@ -4,7 +4,6 @@ import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response.js";
 import { verifyOtp, verifyEmailOtp } from "../../utils/otp.js";
-import { escapePostgrestValue } from "../../utils/postgrest.js";
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -358,10 +357,7 @@ export async function listUsers(req: Request, res: Response, next: NextFunction)
       .order("created_at", { ascending: false })
       .range(offset, offset + limitNum - 1);
 
-    if (q) {
-      const like = escapePostgrestValue(`%${q}%`);
-      query = query.or(`name.ilike.${like},phone.ilike.${like}`);
-    }
+    if (q) query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
 
     const { data, count, error } = await query;
     if (error) throw new AppError(500, "FETCH_ERROR", "Erreur lors de la récupération");

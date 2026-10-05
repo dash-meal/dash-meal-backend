@@ -4,7 +4,6 @@ import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated } from "../../utils/response.js";
 import { sendLegalDocsSubmittedEmail, sendLegalDocsDecisionEmail } from "../../utils/email.js";
 import { env } from "../../config/env.js";
-import { escapePostgrestValue } from "../../utils/postgrest.js";
 import bcrypt from "bcryptjs";
 
 export async function applyForBrand(req: Request, res: Response, next: NextFunction) {
@@ -14,9 +13,7 @@ export async function applyForBrand(req: Request, res: Response, next: NextFunct
     const { data: existing, error: existingErr } = await supabase
       .from("brand_applications")
       .select("id, status")
-      .or(
-        `contact_email.eq.${escapePostgrestValue(contact_email)},contact_phone.eq.${escapePostgrestValue(contact_phone)}`
-      )
+      .or(`contact_email.eq.${contact_email},contact_phone.eq.${contact_phone}`)
       .limit(1);
 
     if (existingErr) {

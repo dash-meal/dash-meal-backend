@@ -5,7 +5,6 @@ import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response.js";
 import { env } from "../../config/env.js";
-import { escapePostgrestValue } from "../../utils/postgrest.js";
 
 export async function uploadImage(req: Request, res: Response, next: NextFunction) {
   try {
@@ -281,7 +280,7 @@ export async function listCategories(req: Request, res: Response, next: NextFunc
 
     if (branch_id) {
       // Catégories de l'agence + catégories globales (branch_id null)
-      query = query.or(`branch_id.eq.${escapePostgrestValue(branch_id as string)},branch_id.is.null`);
+      query = query.or(`branch_id.eq.${branch_id},branch_id.is.null`);
     }
 
     const { data, error } = await query;

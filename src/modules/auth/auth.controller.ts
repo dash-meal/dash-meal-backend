@@ -84,25 +84,8 @@ export async function verifySuperAdminOtp(req: Request, res: Response, next: Nex
 
 export async function registerSuperAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await authService.registerSuperAdmin(req.body, req.user);
+    const result = await authService.registerSuperAdmin(req.body);
     res.status(201).json({ success: true, data: result });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function logout(req: Request, res: Response, next: NextFunction) {
-  try {
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      authService.revokeTokenSession(token);
-    }
-    const { refresh_token } = req.body ?? {};
-    if (refresh_token && typeof refresh_token === "string") {
-      authService.revokeTokenSession(refresh_token);
-    }
-    res.status(200).json({ success: true, message: "Déconnexion réussie" });
   } catch (err) {
     next(err);
   }

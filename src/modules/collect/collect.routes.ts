@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, requireRole, loadBrandFromBranchParam, loadOrderOwnershipFromParam, requireOwnBrand } from "../../middleware/auth.js";
+import { authenticate, requireRole } from "../../middleware/auth.js";
 import * as controller from "./collect.controller.js";
 
 const router: import("express").Router = Router();
@@ -14,19 +14,9 @@ router.post("/scan", authenticate, requireRole("admin", "superadmin", "branch_ma
 router.get("/order/:orderId", authenticate, requireRole("user"), controller.getCollectDetails);
 
 // ─── Admin : QR code d'une commande collect spécifique ───────────────────────
-router.get(
-  "/admin/order/:orderId",
-  authenticate, requireRole("admin", "superadmin"),
-  loadOrderOwnershipFromParam("orderId"), requireOwnBrand,
-  controller.getCollectQrForAdmin
-);
+router.get("/admin/order/:orderId", authenticate, requireRole("admin", "superadmin"), controller.getCollectQrForAdmin);
 
 // ─── Lister les commandes click & collect d'une agence (par jour/statut) ─────
-router.get(
-  "/branch/:branchId",
-  authenticate, requireRole("admin", "superadmin"),
-  loadBrandFromBranchParam("branchId"), requireOwnBrand,
-  controller.listBranchCollects
-);
+router.get("/branch/:branchId", authenticate, requireRole("admin", "superadmin"), controller.listBranchCollects);
 
 export default router;

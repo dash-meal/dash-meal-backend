@@ -7,7 +7,7 @@ export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
 
 // Auth
-export const JWT_ACCESS_EXPIRES_IN = "15m";
+export const JWT_ACCESS_EXPIRES_IN = "24h"; // TODO: remettre "15m" en production
 export const JWT_REFRESH_EXPIRES_IN = "30d";
 export const OTP_EXPIRES_IN_MINUTES = 10;
 export const OTP_LENGTH = 6;

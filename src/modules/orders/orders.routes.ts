@@ -1,6 +1,6 @@
 ﻿import { Router } from "express";
 import { z } from "zod";
-import { authenticate, requireRole, loadOrderOwnership, requireBranchAccess, requireOwnBrand } from "../../middleware/auth.js";
+import { authenticate, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   CreateCollectOrderSchema,
@@ -27,9 +27,9 @@ router.get("/:id", authenticate, controller.getOrder);
 
 // ─── Gestion admin / branch_manager ──────────────────────────────────────────
 router.get("/", authenticate, requireRole("admin", "superadmin", "driver", "branch_manager"), controller.listOrders);
-router.patch("/:id/status", authenticate, requireRole("admin", "superadmin", "branch_manager"), loadOrderOwnership, requireBranchAccess, requireOwnBrand, validate(UpdateOrderStatusSchema), controller.updateOrderStatus);
-router.post("/:id/assign-driver", authenticate, requireRole("admin", "superadmin"), loadOrderOwnership, requireOwnBrand, validate(AssignDriverSchema), controller.assignDriver);
-router.get( "/:id/history", authenticate, requireRole("admin", "superadmin", "branch_manager"), loadOrderOwnership, requireBranchAccess, requireOwnBrand, controller.getOrderHistory);
+router.patch("/:id/status", authenticate, requireRole("admin", "superadmin", "branch_manager"), validate(UpdateOrderStatusSchema), controller.updateOrderStatus);
+router.post("/:id/assign-driver", authenticate, requireRole("admin", "superadmin"), validate(AssignDriverSchema), controller.assignDriver);
+router.get( "/:id/history", authenticate, requireRole("admin", "superadmin", "branch_manager"), controller.getOrderHistory);
 router.post("/:id/cancel", authenticate, controller.cancelOrder);
 router.post("/:id/convert-to-delivery", authenticate, requireRole("user"), validate(ConvertToDeliverySchema), controller.convertToDelivery);
 router.post("/:id/rate", authenticate, requireRole("user"), validate(z.object({ rating: z.number().int().min(1).max(5), comment: z.string().max(500).optional() })), controller.rateOrder);
