@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../../middleware/auth.js";
-import { upload, getDriverDocs, uploadDriverDoc, listDriversKyc, reviewDriverKyc } from "./driver-docs.controller.js";
+import { documentUpload } from "../../middleware/upload.js";
+import { getDriverDocs, uploadDriverDoc, listDriversKyc, reviewDriverKyc } from "./driver-docs.controller.js";
 
 const router: Router = Router();
 
@@ -24,7 +25,7 @@ router.get(
 router.post(
   "/driver/:driver_id/upload",
   authenticate,
-  upload.single("document"),
+  documentUpload.single("document"),
   uploadDriverDoc
 );
 

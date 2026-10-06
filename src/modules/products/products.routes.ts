@@ -1,5 +1,4 @@
 import { Router } from "express";
-import multer from "multer";
 import {
   authenticate,
   requireRole,
@@ -9,7 +8,7 @@ import {
   requireOwnBrand,
 } from "../../middleware/auth.js";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+import { imageUpload } from "../../middleware/upload.js";
 import { validate } from "../../middleware/validate.js";
 import {
   CreateProductSchema,
@@ -55,7 +54,7 @@ router.put("/stock", authenticate, requireRole("admin", "superadmin"), validate(
 router.get("/:id/stock", authenticate, requireRole("admin", "superadmin"), loadProductOwnership, requireBranchAccess, requireOwnBrand, controller.getStockByBranch);
 
 // Upload image produit
-router.post("/upload-image", authenticate, requireRole("admin", "superadmin"), upload.single("image"), controller.uploadImage);
+router.post("/upload-image", authenticate, requireRole("admin", "superadmin"), imageUpload.single("image"), controller.uploadImage);
 
 // Catégories
 router.post("/categories", authenticate, requireRole("admin", "superadmin"), validate(CreateCategorySchema), controller.createCategory);
