@@ -8,6 +8,7 @@ import { notifyOrderStatus, notifyDriversNewDelivery } from "../../utils/push.js
 import { sendCollectQrEmail } from "../../utils/email.js";
 import { reservePlatformStock } from "../../utils/stock.js";
 import { logger } from "../../utils/logger.js";
+import { resolvePromotion, recordPromotionUsage, type ResolvedPromotion } from "../promotions/promotions.service.js";
 
 // ─── Création unifiée avec items + paiement Campay ───────────────────────────
 export async function createOrder(req: Request, res: Response, next: NextFunction) {
@@ -557,8 +558,21 @@ async function buildAndCreateOrder(
     });
   }
 
-  // Appliquer promotion si fournie
-  // TODO: valider promotion_code
+  // Appliquer promotion si fournie (lève une erreur si le code est invalide,
+  // avant toute écriture). La réduction porte sur le sous-total, pas sur les frais de livraison.
+  let promotion: ResolvedPromotion | null = null;
+  if (promotion_code) {
+    const { data: branch } = await supabase.from("branches").select("brand_id").eq("id", branch_id).single();
+    promotion = await resolvePromotion({
+      code: promotion_code,
+      orderTotal: subtotal,
+      userId: user_id,
+      branchId: branch_id,
+      brandId: branch?.brand_id ?? undefined,
+    });
+  }
+  const discount = promotion?.discount ?? 0;
+  const delivery_fee = type === "delivery" ? 5 : 0;
 
   const { data: order, error } = await supabase
     .from("orders")
@@ -568,8 +582,9 @@ async function buildAndCreateOrder(
       type,
       status: "pending",
       subtotal,
-      delivery_fee: type === "delivery" ? 5 : 0,
-      total: subtotal + (type === "delivery" ? 5 : 0),
+      discount,
+      delivery_fee,
+      total: subtotal - discount + delivery_fee,
       notes: notes ?? null,
     })
     .select()
@@ -584,6 +599,11 @@ async function buildAndCreateOrder(
 
   // Réserver le stock plateforme (décrément atomique, tout ou rien)
   await reservePlatformStock(branch_id, order.id, items);
+
+  // Comptabiliser l'utilisation du code promo
+  if (promotion) {
+    await recordPromotionUsage(promotion.promotion_id, order.id, user_id);
+  }
 
   // Vider le panier
   await supabase.from("cart_items").delete().eq("cart_id", cart.id);
