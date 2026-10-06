@@ -11,6 +11,7 @@ import {
 import { notifyOrderStatus, notifyPaymentFailed } from "../../utils/push.js";
 import { generateQrCode } from "../../utils/qrcode.js";
 import { reservePlatformStock } from "../../utils/stock.js";
+import { logger } from "../../utils/logger.js";
 
 // ─── Initier un paiement AVANT création de commande ─────────────────────────
 // Flux : initier CamPay → USSD push → user confirme PIN → poll status → créer commande
@@ -48,7 +49,7 @@ export async function initiateOrderPayment(req: Request, res: Response, next: Ne
     const delivery_fee = type === "delivery" ? 5 : 0;
     const total = subtotal + delivery_fee;
 
-    console.log(`[CamPay] Préparation paiement — total: ${total} XAF, articles: ${orderItems.length}`);
+    logger.info({ total, items: orderItems.length }, "[CamPay] Préparation paiement");
 
     // ── 1. Stocker les données de commande D'ABORD ───────────────────────────
     // → si CamPay échoue ensuite, l'intent est supprimé (pas d'USSD orphelin)
@@ -83,7 +84,7 @@ export async function initiateOrderPayment(req: Request, res: Response, next: Ne
     // ── 2. Appeler CamPay (USSD push envoyé au téléphone) ────────────────────
     let campayData;
     try {
-      console.log(`[CamPay] Envoi USSD push — total: ${Math.round(total)} XAF, téléphone: ${payment_phone}`);
+      logger.info({ total: Math.round(total), phoneSuffix: String(payment_phone).slice(-4) }, "[CamPay] Envoi USSD push");
       campayData = await campayCollect({
         amount: Math.round(total),
         phone: payment_phone,
@@ -216,7 +217,7 @@ export async function getPaymentStatus(req: Request, res: Response, next: NextFu
         campayData = await campayTransactionStatus(reference);
       } catch (campayErr) {
         // Erreur réseau vers CamPay uniquement → on retente au prochain poll
-        console.error("[Poll] Erreur réseau CamPay:", campayErr);
+        logger.warn({ err: campayErr }, "[Poll] Erreur réseau CamPay");
         return sendSuccess(res, { status: "pending" });
       }
 
@@ -244,9 +245,9 @@ export async function getPaymentStatus(req: Request, res: Response, next: NextFu
         }
 
         const d = intent.order_data as Record<string, unknown>;
-        console.log(`[Poll] Paiement SUCCESSFUL pour intent ${intent.id}, création commande...`);
+        logger.info({ intentId: intent.id }, "[Poll] Paiement SUCCESSFUL, création commande");
         const order_id = await createOrderFromIntent(intent.user_id, intent.id, campayData.operator, d);
-        console.log(`[Poll] Commande créée : ${order_id}`);
+        logger.info({ intentId: intent.id, orderId: order_id }, "[Poll] Commande créée");
 
         notifyOrderStatus(intent.user_id, order_id, "confirmed", order_id).catch(() => {});
         return sendSuccess(res, { status: "paid", order_id, operator: campayData.operator });
@@ -292,7 +293,7 @@ export async function getPaymentStatus(req: Request, res: Response, next: NextFu
               p_payment_id:  payment.id,
               p_order_id:    payment.order_id,
               p_description: `Commande #${String(payment.order_id).slice(0, 8)} — paiement en ligne`,
-            }).then(({ error }) => { if (error) console.error("[poll] wallet credit:", error.message); });
+            }).then(({ error }) => { if (error) logger.error({ err: error, orderId: payment.order_id }, "[Poll] Crédit wallet échoué"); });
           }
 
           if (updatedOrder?.user_id) {
@@ -349,10 +350,10 @@ async function createOrderFromIntent(
     .single();
 
   if (orderErr || !order) {
-    console.error("[createOrderFromIntent] Erreur création order:", orderErr?.message);
+    logger.error({ err: orderErr, intentId }, "[createOrderFromIntent] Création order échouée");
     throw new AppError(500, "CREATE_ORDER_ERROR", `Échec création commande: ${orderErr?.message ?? "inconnu"}`);
   }
-  console.log(`[createOrderFromIntent] Order créé: ${order.id}`);
+  logger.info({ orderId: order.id, intentId }, "[createOrderFromIntent] Order créé");
 
   // ── 2. Insérer les articles ───────────────────────────────────────────────
   const items = d.items as OrderItem[];
@@ -360,7 +361,7 @@ async function createOrderFromIntent(
     items.map((i) => ({ ...i, order_id: order.id }))
   );
   if (itemsErr) {
-    console.error("[createOrderFromIntent] Erreur order_items:", itemsErr.message);
+    logger.error({ err: itemsErr, orderId: order.id }, "[createOrderFromIntent] Insertion order_items échouée");
     throw new AppError(500, "CREATE_ITEMS_ERROR", `Échec items: ${itemsErr.message}`);
   }
 
@@ -376,7 +377,7 @@ async function createOrderFromIntent(
     const { error: collectErr } = await supabase.from("collect_orders").insert({
       order_id: order.id, slot_id: d.slot_id, qr_code, pickup_status: "waiting",
     });
-    if (collectErr) console.error("[createOrderFromIntent] Erreur collect_orders:", collectErr.message);
+    if (collectErr) logger.error({ err: collectErr, orderId: order.id }, "[createOrderFromIntent] Insertion collect_orders échouée");
   }
 
   // ── 4. Enregistrer le paiement ────────────────────────────────────────────
@@ -394,7 +395,7 @@ async function createOrderFromIntent(
       brand_id: branch?.brand_id ?? null,
     });
     if (deliveryErr) {
-      console.error("[createOrderFromIntent] Erreur deliveries:", deliveryErr.message);
+      logger.error({ err: deliveryErr, orderId: order.id }, "[createOrderFromIntent] Insertion deliveries échouée");
     }
   }
 
@@ -413,7 +414,7 @@ async function createOrderFromIntent(
     operator: operator ?? null,
   }).select().single();
 
-  if (paymentErr) console.error("[createOrderFromIntent] Erreur payments:", paymentErr.message);
+  if (paymentErr) logger.error({ err: paymentErr, orderId: order.id }, "[createOrderFromIntent] Insertion payments échouée");
 
   // ── 5. Créditer le wallet de l'agence (paiement en ligne = sans frais) ──────
   if (branch?.brand_id && d.branch_id && payment) {
@@ -425,7 +426,7 @@ async function createOrderFromIntent(
       p_order_id:   order.id,
       p_description: `Commande #${order.id.slice(0, 8)} — paiement en ligne`,
     });
-    if (walletErr) console.error("[createOrderFromIntent] Erreur wallet credit:", walletErr.message);
+    if (walletErr) logger.error({ err: walletErr, orderId: order.id }, "[createOrderFromIntent] Crédit wallet échoué");
   }
 
   // ── 6. Marquer l'intent comme traité ──────────────────────────────────────
@@ -470,7 +471,7 @@ export async function campayWebhook(req: Request, res: Response, next: NextFunct
 
       // Vérification du montant (si fourni par CamPay)
       if (webhookAmount != null && existingPayment && Number(webhookAmount) !== Number(existingPayment.amount)) {
-        console.error(`[webhook] Montant invalide pour ${reference}: reçu ${webhookAmount}, attendu ${existingPayment.amount}`);
+        logger.error({ reference, received: webhookAmount, expected: existingPayment.amount }, "[Webhook] Montant invalide");
         res.status(400).json({ status: "error", message: "Montant invalide" });
         return;
       }
@@ -503,7 +504,7 @@ export async function campayWebhook(req: Request, res: Response, next: NextFunct
               p_payment_id:  updatedPayment.id,
               p_order_id:    external_reference,
               p_description: `Commande #${String(external_reference).slice(0, 8)} — paiement en ligne`,
-            }).then(({ error }) => { if (error) console.error("[webhook] wallet credit:", error.message); });
+            }).then(({ error }) => { if (error) logger.error({ err: error, orderId: external_reference }, "[Webhook] Crédit wallet échoué"); });
           }
 
           if (updatedOrder?.user_id) {

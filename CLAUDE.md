@@ -41,6 +41,8 @@ throw new AppError(statusCode, "ERROR_CODE", "Message humain")
 res.json({ success: true, data: T[], pagination: { page, limit, total, total_pages } })
 ```
 
+**Logs** : utiliser `logger` de `src/utils/logger.ts` (pino), jamais `console.*`. Format : `logger.error({ err, orderId }, "Message")` — contexte en premier, message ensuite. JSON en production (logs Render), sortie colorée via `pino-pretty` en dev. Niveau réglable avec `LOG_LEVEL`. Les clés `password`, `token`, `otp`, `authorization`... sont masquées automatiquement.
+
 **Database** : Supabase (service role key) via `src/config/supabase.ts`. JWT custom, jamais Supabase Auth côté backend.
 
 ## Déploiement (Render)

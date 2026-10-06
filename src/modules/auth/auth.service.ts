@@ -8,6 +8,7 @@ import { AppError } from "../../middleware/errorHandler.js";
 import { env } from "../../config/env.js";
 import { escapePostgrestValue } from "../../utils/postgrest.js";
 import { isTokenRevoked, revokeToken } from "../../utils/tokenBlacklist.js";
+import { logger } from "../../utils/logger.js";
 import type {
   RegisterUserInput,
   LoginUserInput,
@@ -62,7 +63,7 @@ export async function registerUser(input: RegisterUserInput) {
   });
 
   if (pendingErr) {
-    console.error("[registerUser] pending_registrations insert failed:", pendingErr);
+    logger.error({ err: pendingErr }, "[registerUser] Insertion pending_registrations échouée");
     throw new AppError(500, "REGISTRATION_ERROR", "Échec de l'inscription temporaire");
   }
 
@@ -258,9 +259,9 @@ export async function loginAdmin(input: LoginAdminInput): Promise<{ requires_otp
   }
 
   const { emailSent } = await sendEmailOtp(admin.email);
-  console.log(`[OTP][ADMIN_LOGIN] ${admin.email}: emailSent=${emailSent}`);
+  logger.info({ email: admin.email, emailSent }, "[OTP][ADMIN_LOGIN] OTP email demandé");
   if (!emailSent) {
-    console.warn(`⚠️  Email OTP non envoyé pour l'admin — vérifier la config RESEND`);
+    logger.warn({ email: admin.email }, "Email OTP non envoyé pour l'admin — vérifier la config RESEND");
   }
 
   return { requires_otp: true, email: admin.email };
@@ -316,9 +317,9 @@ export async function loginSuperAdmin(input: LoginAdminInput): Promise<{ require
   }
 
   const { emailSent } = await sendEmailOtp(superAdmin.email);
-  console.log(`[OTP][SUPERADMIN_LOGIN] ${superAdmin.email}: emailSent=${emailSent}`);
+  logger.info({ email: superAdmin.email, emailSent }, "[OTP][SUPERADMIN_LOGIN] OTP email demandé");
   if (!emailSent) {
-    console.warn(`⚠️  Email OTP non envoyé pour le superadmin — vérifier la config RESEND`);
+    logger.warn({ email: superAdmin.email }, "Email OTP non envoyé pour le superadmin — vérifier la config RESEND");
   }
 
   return { requires_otp: true, email: superAdmin.email };

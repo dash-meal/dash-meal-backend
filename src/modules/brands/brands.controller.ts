@@ -6,6 +6,7 @@ import { sendLegalDocsSubmittedEmail, sendLegalDocsDecisionEmail } from "../../u
 import { env } from "../../config/env.js";
 import { escapePostgrestValue } from "../../utils/postgrest.js";
 import bcrypt from "bcryptjs";
+import { logger } from "../../utils/logger.js";
 
 export async function applyForBrand(req: Request, res: Response, next: NextFunction) {
   try {
@@ -20,12 +21,7 @@ export async function applyForBrand(req: Request, res: Response, next: NextFunct
       .limit(1);
 
     if (existingErr) {
-      console.error("Supabase pre-check error (brand_applications):", {
-        code: existingErr.code,
-        message: existingErr.message,
-        details: existingErr.details,
-        hint: existingErr.hint,
-      });
+      logger.error({ err: existingErr }, "[brand_applications] Vérification doublon échouée");
       throw new AppError(500, "APPLICATION_ERROR", "Error while checking existing application");
     }
 
@@ -44,12 +40,7 @@ export async function applyForBrand(req: Request, res: Response, next: NextFunct
       .single();
 
     if (error) {
-      console.error("Supabase insert error (brand_applications):", {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      });
+      logger.error({ err: error }, "[brand_applications] Insertion échouée");
 
       if (error.code === "23505") {
         throw new AppError(

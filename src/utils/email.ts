@@ -2,6 +2,7 @@
 import { env } from "../config/env.js";
 import { OTP_EXPIRES_IN_MINUTES } from "../shared/index.js";
 import { supabase } from "../config/supabase.js";
+import { logger } from "./logger.js";
 
 type SendEmailResult = { ok: boolean; id?: string };
 
@@ -29,7 +30,7 @@ async function sendEmail(params: {
   const client = getResendClient();
 
   if (!client) {
-    console.warn("RESEND_API_KEY missing - email not sent", { to: params.to, subject: params.subject });
+    logger.warn({ to: params.to, subject: params.subject }, "RESEND_API_KEY manquante — email non envoyé");
     return { ok: false };
   }
 
@@ -43,13 +44,13 @@ async function sendEmail(params: {
     });
 
     if (error) {
-      console.error("Email send failed:", error);
+      logger.error({ err: error, to: params.to }, "Envoi email échoué");
       return { ok: false };
     }
 
     return { ok: true, id: data?.id };
   } catch (error) {
-    console.error("Email send error:", error);
+    logger.error({ err: error, to: params.to }, "Erreur lors de l'envoi email");
     return { ok: false };
   }
 }
@@ -64,7 +65,7 @@ function normalizeEmail(email: string): string {
 
 export async function sendCodeByEmail(email: string, code: string): Promise<{ emailSent: boolean }> {
   const normalizedEmail = normalizeEmail(email);
-  if (env.OTP_LOG_CODES) console.log(`[OTP][EMAIL] ${normalizedEmail}: ${code} (expires in ${OTP_EXPIRES_IN_MINUTES} min)`);
+  if (env.OTP_LOG_CODES) logger.info(`[OTP][EMAIL] ${normalizedEmail}: ${code} (expire dans ${OTP_EXPIRES_IN_MINUTES} min)`);
 
   const expiresAt = new Date(Date.now() + OTP_EXPIRES_IN_MINUTES * 60 * 1000);
   await supabase.from("otps").delete().eq("email", normalizedEmail);

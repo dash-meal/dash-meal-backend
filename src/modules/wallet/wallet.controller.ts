@@ -3,6 +3,7 @@ import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess } from "../../utils/response.js";
 import { campayWithdraw, campayGetSubscriberName } from "../../services/campay.js";
+import { logger } from "../../utils/logger.js";
 
 const PLATFORM_FEE_RATE = 0.015; // 1.5%
 
@@ -135,7 +136,7 @@ export async function requestWithdrawal(req: Request, res: Response, next: NextF
       campayRef = campayRes.reference;
     } catch (campayErr: any) {
       if (campayErr instanceof AppError) throw campayErr;
-      console.error("[requestWithdrawal] Erreur virement:", campayErr);
+      logger.error({ err: campayErr }, "[requestWithdrawal] Virement échoué");
       throw new AppError(502, "CAMPAY_ERROR", "Une erreur est survenue, veuillez contacter le support.");
     }
 
@@ -217,7 +218,7 @@ export async function platformWithdraw(req: Request, res: Response, next: NextFu
       campayRef = campayRes.reference;
     } catch (campayErr: any) {
       if (campayErr instanceof AppError) throw campayErr;
-      console.error("[requestPlatformWithdrawal] Erreur virement:", campayErr);
+      logger.error({ err: campayErr }, "[requestPlatformWithdrawal] Virement échoué");
       throw new AppError(502, "CAMPAY_ERROR", "Une erreur est survenue, veuillez contacter le support.");
     }
 

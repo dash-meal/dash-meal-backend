@@ -5,6 +5,7 @@ import { AppError } from "../../middleware/errorHandler.js";
 import { sendSuccess, sendCreated, sendPaginated } from "../../utils/response.js";
 import { verifyOtp, verifyEmailOtp } from "../../utils/otp.js";
 import { escapePostgrestValue } from "../../utils/postgrest.js";
+import { logger } from "../../utils/logger.js";
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -333,10 +334,10 @@ export async function registerPushToken(req: Request, res: Response, next: NextF
           { user_id: req.user!.id, token, platform: platform ?? null, updated_at: new Date().toISOString() },
           { onConflict: "user_id" }
         );
-      if (err2) console.error("[PushToken] Upsert error:", err2.message);
+      if (err2) logger.error({ err: err2, userId: req.user!.id }, "[PushToken] Upsert échoué");
     }
 
-    console.log(`[PushToken] Enregistré pour user ${req.user!.id}: ${token.slice(0, 30)}...`);
+    logger.debug({ userId: req.user!.id }, "[PushToken] Token enregistré");
     sendSuccess(res, null, "Token enregistré");
   } catch (err) {
     next(err);

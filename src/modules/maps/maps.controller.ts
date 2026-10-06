@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { env } from "../../config/env.js";
 import { sendSuccess } from "../../utils/response.js";
 import { AppError } from "../../middleware/errorHandler.js";
+import { logger } from "../../utils/logger.js";
 
 const MAPS_BASE = "https://maps.googleapis.com/maps/api";
 
@@ -35,7 +36,7 @@ export async function autocomplete(req: Request, res: Response, next: NextFuncti
     };
 
     if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-      console.error("[Maps] Autocomplete error:", data.status, data.error_message);
+      logger.error({ status: data.status, error: data.error_message }, "[Maps] Autocomplete en erreur");
       sendSuccess(res, []);
       return;
     }
@@ -77,7 +78,7 @@ export async function placeDetails(req: Request, res: Response, next: NextFuncti
     };
 
     if (data.status !== "OK" || !data.result) {
-      console.error("[Maps] PlaceDetails error:", data.status, data.error_message);
+      logger.error({ status: data.status, error: data.error_message }, "[Maps] PlaceDetails en erreur");
       throw new AppError(502, "MAPS_ERROR", `Google Places Details: ${data.status}`);
     }
 

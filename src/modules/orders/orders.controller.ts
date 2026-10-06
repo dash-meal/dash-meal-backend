@@ -7,6 +7,7 @@ import { campayCollect } from "../../services/campay.js";
 import { notifyOrderStatus, notifyDriversNewDelivery } from "../../utils/push.js";
 import { sendCollectQrEmail } from "../../utils/email.js";
 import { reservePlatformStock } from "../../utils/stock.js";
+import { logger } from "../../utils/logger.js";
 
 // ─── Création unifiée avec items + paiement Campay ───────────────────────────
 export async function createOrder(req: Request, res: Response, next: NextFunction) {
@@ -83,7 +84,7 @@ export async function createOrder(req: Request, res: Response, next: NextFunctio
               total,
             });
           }
-        } catch (e) { console.error("[QR email] erreur:", e); }
+        } catch (e) { logger.error({ err: e }, "[QR email] Envoi échoué"); }
       })();
     } else if (type === "delivery") {
       const { data: branch } = await supabase.from("branches").select("brand_id").eq("id", branch_id).single();
@@ -96,7 +97,7 @@ export async function createOrder(req: Request, res: Response, next: NextFunctio
         status: "pending",
         brand_id: branch?.brand_id ?? null,
       });
-      if (deliveryErr) console.error("[createOrder] delivery insert failed:", deliveryErr.message);
+      if (deliveryErr) logger.error({ err: deliveryErr }, "[createOrder] Insertion delivery échouée");
     }
 
     // ── Initier le paiement Campay ────────────────────────────────────────────
@@ -127,7 +128,7 @@ export async function createOrder(req: Request, res: Response, next: NextFunctio
         operator,
       });
     } catch (campayErr) {
-      console.error("Campay initiation failed:", campayErr);
+      logger.error({ err: campayErr }, "[createOrder] Initiation Campay échouée");
       // Commande créée même si Campay échoue — l'utilisateur peut réessayer
     }
 
@@ -179,7 +180,7 @@ export async function createDeliveryOrder(req: Request, res: Response, next: Nex
       status: "pending",
       brand_id: branch?.brand_id ?? null,
     });
-    if (deliveryErr) console.error("[createDeliveryOrder] delivery insert failed:", deliveryErr.message);
+    if (deliveryErr) logger.error({ err: deliveryErr }, "[createDeliveryOrder] Insertion delivery échouée");
 
     sendCreated(res, order);
   } catch (err) {

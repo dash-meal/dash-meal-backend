@@ -16,6 +16,7 @@
 
 import { supabase } from "../config/supabase.js";
 import { notifyUser } from "../utils/push.js";
+import { logger } from "../utils/logger.js";
 
 const STALE_THRESHOLD_MS = 15 * 60 * 1000;       // commande figée depuis 15 min
 const STALE_MAX_AGE_MS   = 24 * 60 * 60 * 1000;  // ignorer commandes > 24h (abandonnées)
@@ -75,13 +76,13 @@ async function checkStaleOrders() {
     .gt("updated_at", maxAge); // ignorer les commandes abandonnées depuis plus de 24h
 
   if (error) {
-    console.error("[StaleNotifier] Erreur récupération commandes:", error.message);
+    logger.error({ err: error }, "[StaleNotifier] Récupération commandes échouée");
     return;
   }
 
   if (!orders || orders.length === 0) return;
 
-  console.log(`[StaleNotifier] ${orders.length} commande(s) figée(s) détectée(s)`);
+  logger.info({ count: orders.length }, "[StaleNotifier] Commande(s) figée(s) détectée(s)");
 
   for (const order of orders) {
     const msg = STALE_MESSAGES[order.status];
@@ -112,12 +113,12 @@ async function checkStaleOrders() {
       is_read: false,
     }).then(() => {});
 
-    console.log(`[StaleNotifier] Notifié ${order.user_id} — commande #${orderRef} figée en "${order.status}"`);
+    logger.info({ userId: order.user_id, orderId: order.id, status: order.status }, "[StaleNotifier] Client notifié");
   }
 }
 
 export function startStaleOrderNotifier() {
-  console.log("[StaleNotifier] Démarré — premier check dans 5 min, puis toutes les 5 min");
+  logger.info("[StaleNotifier] Démarré — premier check dans 5 min, puis toutes les 5 min");
   // Délai initial de 5 min pour ne pas envoyer de notifs au redémarrage du serveur
   setTimeout(() => {
     checkStaleOrders();

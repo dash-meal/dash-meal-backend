@@ -1,6 +1,7 @@
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
 import { campayCollect, campayTransactionStatus, campayWithdraw } from "../../services/campay.js";
+import { logger } from "../../utils/logger.js";
 
 const PRICE_PER_UNIT = 10;
 const USERS_PER_UNIT = 6;
@@ -92,7 +93,7 @@ export async function pollAdPaymentStatus(reference: string) {
       p_description: `Pub "${intent.title}" - ${intent.target_count} utilisateurs`,
     });
     if (walletErr) {
-      console.error("[Ads] credit_platform_wallet_for_ad error:", walletErr);
+      logger.error({ err: walletErr }, "[Ads] credit_platform_wallet_for_ad a échoué");
       throw new AppError(500, "WALLET_ERROR", `Wallet plateforme : ${walletErr.message}`);
     }
 
@@ -111,7 +112,7 @@ export async function pollAdPaymentStatus(reference: string) {
       .single();
 
     if (adErr || !newAd) {
-      console.error("[Ads] ad insert error:", adErr);
+      logger.error({ err: adErr }, "[Ads] Insertion pub échouée");
       throw new AppError(500, "DB_ERROR", `Création pub : ${adErr?.message ?? "no data"}`);
     }
 

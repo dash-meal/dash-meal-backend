@@ -9,6 +9,7 @@
 
 import axios from "axios";
 import { API_PREFIX } from "../shared/index.js";
+import { logger } from "../utils/logger.js";
 
 const MIN_INTERVAL_MS =  6 * 60 * 1000; //  6 min
 const MAX_INTERVAL_MS = 10 * 60 * 1000; // 10 min
@@ -20,10 +21,10 @@ function nextDelay(): number {
 async function ping(baseUrl: string) {
   try {
     await axios.get(`${baseUrl}${API_PREFIX}/health`, { timeout: 15_000 });
-    console.log("[KeepAlive] Ping OK");
+    logger.debug("[KeepAlive] Ping OK");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[KeepAlive] Ping échoué : ${message}`);
+    logger.warn({ error: message }, "[KeepAlive] Ping échoué");
   }
 }
 
@@ -37,6 +38,6 @@ export function startKeepAlive() {
     }, nextDelay());
   };
 
-  console.log(`[KeepAlive] Démarré — ping ${baseUrl}${API_PREFIX}/health toutes les 6 à 10 min`);
+  logger.info({ url: `${baseUrl}${API_PREFIX}/health` }, "[KeepAlive] Démarré — ping toutes les 6 à 10 min");
   schedule();
 }

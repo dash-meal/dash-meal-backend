@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import * as svc from "./user-wallet.service.js";
+import { logger } from "../../utils/logger.js";
 
 // ── GET /user-wallet ──────────────────────────────────────────────────────────
 export async function getMyWallet(req: Request, res: Response, next: NextFunction) {
@@ -101,44 +102,41 @@ export async function getPaymentStatus(req: Request, res: Response, next: NextFu
       .maybeSingle();
 
     if (!tx) {
-      console.log(`[getPaymentStatus] ❌ NOT_FOUND reference="${reference}" user="${req.user!.id}"`);
+      logger.warn({ reference, userId: req.user!.id }, "[getPaymentStatus] Transaction introuvable");
       res.status(404).json({ success: false, error: { code: "NOT_FOUND" } }); return;
     }
 
-    console.log(`[getPaymentStatus] reference="${reference}" status="${tx.status}" type="${tx.type}"`);
+    const log = logger.child({ reference, type: tx.type });
+    log.debug({ status: tx.status }, "[getPaymentStatus] Transaction trouvée");
 
     // Déjà résolu
     if (tx.status !== "pending") {
-      console.log(`[getPaymentStatus] déjà résolu → status="${tx.status}"`);
+      log.debug({ status: tx.status }, "[getPaymentStatus] Déjà résolue");
       res.json({ success: true, data: { status: tx.status, type: tx.type, amount: tx.amount } });
       return;
     }
 
     // Interroger Campay directement pour ne pas dépendre du webhook
     try {
-      console.log(`[getPaymentStatus] interrogation Campay pour reference="${reference}"...`);
       const campay = await campayTransactionStatus(reference);
-      console.log(`[getPaymentStatus] Campay réponse: status="${campay.status}" amount=${campay.amount} raw=`, JSON.stringify(campay));
+      log.debug({ campay }, "[getPaymentStatus] Réponse Campay");
 
       if (campay.status === "SUCCESSFUL") {
         let confirmed = false;
         try {
           if (tx.type === "activation") {
-            console.log(`[getPaymentStatus] appel confirmActivation reference="${reference}" amount=${campay.amount}`);
             confirmed = await svc.confirmActivation(reference, campay.amount);
-            console.log(`[getPaymentStatus] confirmActivation retourne confirmed=${confirmed}`);
           } else if (tx.type === "topup") {
-            console.log(`[getPaymentStatus] appel confirmTopUp reference="${reference}" amount=${campay.amount}`);
             await svc.confirmTopUp(reference, campay.amount);
             confirmed = true;
           }
         } catch (confirmErr: any) {
-          console.error("[getPaymentStatus] ❌ confirmActivation a lancé une erreur:", confirmErr?.message, confirmErr?.code);
+          log.error({ err: confirmErr }, "[getPaymentStatus] Confirmation du paiement échouée");
           res.json({ success: true, data: { status: "pending", type: tx.type, amount: tx.amount } });
           return;
         }
         if (confirmed) {
-          console.log(`[getPaymentStatus] ✅ activation confirmée → status=completed`);
+          log.info({ amount: campay.amount }, "[getPaymentStatus] Paiement confirmé");
           res.json({ success: true, data: { status: "completed", type: tx.type, amount: campay.amount } });
         } else {
           // Already processed (false) — re-read actual DB status
@@ -147,20 +145,19 @@ export async function getPaymentStatus(req: Request, res: Response, next: NextFu
             .select("status, amount")
             .eq("reference", reference)
             .maybeSingle();
-          console.log(`[getPaymentStatus] déjà traité → DB status="${txFresh?.status}"`);
+          log.debug({ status: txFresh?.status }, "[getPaymentStatus] Déjà traité");
           res.json({ success: true, data: { status: txFresh?.status ?? "completed", type: tx.type, amount: txFresh?.amount ?? campay.amount } });
         }
         return;
       }
       if (campay.status === "FAILED") {
-        console.log(`[getPaymentStatus] ❌ Campay FAILED → marquer transaction failed`);
+        log.info("[getPaymentStatus] Campay FAILED, transaction marquée failed");
         await supabase.from("user_wallet_transactions").update({ status: "failed" }).eq("reference", reference);
         res.json({ success: true, data: { status: "failed", type: tx.type, amount: tx.amount } });
         return;
       }
-      console.log(`[getPaymentStatus] Campay status="${campay.status}" — toujours pending`);
     } catch (campayErr: any) {
-      console.warn(`[getPaymentStatus] Campay injoignable:`, campayErr?.message ?? campayErr);
+      log.warn({ err: campayErr }, "[getPaymentStatus] Campay injoignable");
       // Campay injoignable → renvoyer le statut DB actuel
     }
 
