@@ -99,7 +99,7 @@ export async function listCommissions(req: Request, res: Response, next: NextFun
 // ─── Détail d'une commission ──────────────────────────────────────────────────
 export async function getCommission(req: Request, res: Response, next: NextFunction) {
   try {
-    let query = supabase
+    const query = supabase
       .from("commissions")
       .select(
         `

@@ -13,7 +13,7 @@ export async function getMyLoyalty(req: Request, res: Response, next: NextFuncti
     const userId = req.user!.id;
 
     // Récupérer ou créer le compte fidélité
-    let { data: account, error: accErr } = await supabase
+    const { data: existingAccount, error: accErr } = await supabase
       .from("loyalty_accounts")
       .select("*")
       .eq("user_id", userId)
@@ -21,6 +21,7 @@ export async function getMyLoyalty(req: Request, res: Response, next: NextFuncti
 
     if (accErr) throw new AppError(500, "DB_ERROR", accErr.message);
 
+    let account = existingAccount;
     if (!account) {
       const { data: created, error: createErr } = await supabase
         .from("loyalty_accounts")
