@@ -1,4 +1,5 @@
 ﻿import { Router } from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { authenticate, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { InitiatePaymentSchema, RecordInPersonPaymentSchema, CreateOrderSchema } from "../../shared/index.js";
@@ -14,9 +15,17 @@ router.post("/initiate-order", authenticate, requireRole("user"), validate(Creat
 // ─── Paiement en ligne sur commande existante ─────────────────────────────────
 router.post("/initiate", authenticate, requireRole("user"), validate(InitiatePaymentSchema), controller.initiatePayment);
 // Webhook CamPay — secret token dans le query param (embarqué dans CAMPAY_CALLBACK_URL)
+// Comparaison à temps constant : on hache les deux valeurs (SHA-256 → 32 octets)
+// pour que timingSafeEqual reçoive des buffers de même longueur sans révéler celle du secret.
+function safeCompare(a: string, b: string): boolean {
+  const hashA = createHash("sha256").update(a).digest();
+  const hashB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(hashA, hashB);
+}
+
 function verifyWebhookSecret(req: Request, res: Response, next: NextFunction) {
-  const secret = req.query.secret as string | undefined;
-  if (!secret || secret !== env.CAMPAY_WEBHOOK_SECRET) {
+  const secret = req.query.secret;
+  if (typeof secret !== "string" || !safeCompare(secret, env.CAMPAY_WEBHOOK_SECRET)) {
     res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "Webhook non autorisé" } });
     return;
   }
