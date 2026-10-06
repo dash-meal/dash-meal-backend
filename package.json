@@ -12,6 +12,7 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:node": "node --import tsx --test tests/*.test.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },

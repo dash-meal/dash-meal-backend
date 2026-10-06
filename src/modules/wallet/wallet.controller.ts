@@ -1,11 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
 import { supabase } from "../../config/supabase.js";
 import { AppError } from "../../middleware/errorHandler.js";
-import { sendSuccess } from "../../utils/response.js";
-import { campayWithdraw, campayGetSubscriberName } from "../../services/campay.js";
-import { logger } from "../../utils/logger.js";
-
-const PLATFORM_FEE_RATE = 0.015; // 1.5%
+import { sendSuccess, sendPaginated } from "../../utils/response.js";
+import { parsePageQuery, pageRange } from "../../utils/pagination.js";
+import { campayPayout, campayGetSubscriberName } from "../../services/campay.js";
+import { computeWithdrawalFee, BRANCH_WITHDRAWAL_FEE_RATE } from "../../utils/walletFees.js";
 
 // ─── GET /wallet ──────────────────────────────────────────────────────────────
 // Solde total (somme des agences) + détail par agence
@@ -55,20 +54,18 @@ export async function getWalletTransactions(req: Request, res: Response, next: N
     const brand_id = req.user!.brand_id;
     if (!brand_id) throw new AppError(403, "FORBIDDEN", "Accès réservé aux admins de marque");
 
-    const page      = Math.max(1, parseInt(req.query.page  as string) || 1);
-    const limit     = Math.min(50, parseInt(req.query.limit as string) || 20);
+    const { page, limit } = parsePageQuery(req.query);
     const type      = req.query.type      as string | undefined;
     const branch_id = req.query.branch_id as string | undefined;
     const date_from = req.query.date_from as string | undefined;
     const date_to   = req.query.date_to   as string | undefined;
-    const from      = (page - 1) * limit;
 
     let query = supabase
       .from("branch_wallet_transactions")
       .select("*, branches(name), orders(id)", { count: "exact" })
       .eq("brand_id", brand_id)
       .order("created_at", { ascending: false })
-      .range(from, from + limit - 1);
+      .range(...pageRange(page, limit));
 
     if (type && type !== "all")   query = query.eq("type", type);
     if (branch_id)                query = query.eq("branch_id", branch_id);
@@ -78,15 +75,7 @@ export async function getWalletTransactions(req: Request, res: Response, next: N
     const { data, count, error } = await query;
     if (error) throw new AppError(500, "DB_ERROR", error.message);
 
-    res.json({
-      success: true,
-      data: data ?? [],
-      pagination: {
-        page, limit,
-        total: count ?? 0,
-        total_pages: Math.ceil((count ?? 0) / limit),
-      },
-    });
+    sendPaginated(res, data ?? [], count ?? 0, page, limit);
   } catch (err) {
     next(err);
   }
@@ -118,27 +107,18 @@ export async function requestWithdrawal(req: Request, res: Response, next: NextF
     if (wErr || !wallet) throw new AppError(404, "WALLET_NOT_FOUND", "Wallet de cette agence introuvable");
     if (wallet.balance < amountNum) throw new AppError(422, "INSUFFICIENT_BALANCE", "Solde insuffisant");
 
-    const platform_fee = Math.round(amountNum * PLATFORM_FEE_RATE);
-    const net_payout   = amountNum - platform_fee;
+    const { fee: platform_fee, net: net_payout } = computeWithdrawalFee(amountNum, BRANCH_WITHDRAWAL_FEE_RATE);
 
     const { data: branch } = await supabase
       .from("branches").select("name").eq("id", branch_id).single();
     const description = `Retrait ${branch?.name ?? branch_id.slice(0, 8)} — ${amountNum.toLocaleString("fr-FR")} FCFA`;
 
-    let campayRef: string;
-    try {
-      const campayRes = await campayWithdraw({
-        amount: net_payout,
-        phone,
-        description,
-        externalReference: `withdrawal_${wallet.id}_${Date.now()}`,
-      });
-      campayRef = campayRes.reference;
-    } catch (campayErr: any) {
-      if (campayErr instanceof AppError) throw campayErr;
-      logger.error({ err: campayErr }, "[requestWithdrawal] Virement échoué");
-      throw new AppError(502, "CAMPAY_ERROR", "Une erreur est survenue, veuillez contacter le support.");
-    }
+    const campayRef = await campayPayout({
+      amount: net_payout,
+      phone,
+      description,
+      externalReference: `withdrawal_${wallet.id}_${Date.now()}`,
+    }, "requestWithdrawal");
 
     const { data: txnId, error: rpcErr } = await supabase.rpc("process_branch_withdrawal", {
       p_branch_id:        branch_id,
@@ -212,15 +192,10 @@ export async function platformWithdraw(req: Request, res: Response, next: NextFu
 
     const description = `Retrait superadmin — ${amountNum.toLocaleString("fr-FR")} FCFA`;
 
-    let campayRef: string;
-    try {
-      const campayRes = await campayWithdraw({ amount: amountNum, phone, description, externalReference: `platform_wd_${Date.now()}` });
-      campayRef = campayRes.reference;
-    } catch (campayErr: any) {
-      if (campayErr instanceof AppError) throw campayErr;
-      logger.error({ err: campayErr }, "[requestPlatformWithdrawal] Virement échoué");
-      throw new AppError(502, "CAMPAY_ERROR", "Une erreur est survenue, veuillez contacter le support.");
-    }
+    const campayRef = await campayPayout(
+      { amount: amountNum, phone, description, externalReference: `platform_wd_${Date.now()}` },
+      "requestPlatformWithdrawal",
+    );
 
     const { error } = await supabase.rpc("process_platform_withdrawal", {
       p_amount: amountNum,
@@ -242,18 +217,16 @@ export async function platformWithdraw(req: Request, res: Response, next: NextFu
 
 export async function getPlatformTransactions(req: Request, res: Response, next: NextFunction) {
   try {
-    const page      = Math.max(1, parseInt(req.query.page  as string) || 1);
-    const limit     = Math.min(50, parseInt(req.query.limit as string) || 20);
+    const { page, limit } = parsePageQuery(req.query);
     const date_from = req.query.date_from as string | undefined;
     const date_to   = req.query.date_to   as string | undefined;
     const type      = req.query.type      as string | undefined;
-    const from      = (page - 1) * limit;
 
     let txQuery = supabase
       .from("platform_wallet_transactions")
       .select("*, brands(name)", { count: "exact" })
       .order("created_at", { ascending: false })
-      .range(from, from + limit - 1);
+      .range(...pageRange(page, limit));
 
     if (type && type !== "all") txQuery = txQuery.eq("type", type);
     if (date_from)              txQuery = txQuery.gte("created_at", date_from);
@@ -263,15 +236,7 @@ export async function getPlatformTransactions(req: Request, res: Response, next:
 
     if (error) throw new AppError(500, "DB_ERROR", error.message);
 
-    res.json({
-      success: true,
-      data: data ?? [],
-      pagination: {
-        page, limit,
-        total: count ?? 0,
-        total_pages: Math.ceil((count ?? 0) / limit),
-      },
-    });
+    sendPaginated(res, data ?? [], count ?? 0, page, limit);
   } catch (err) {
     next(err);
   }
