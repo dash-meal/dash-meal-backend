@@ -43,19 +43,19 @@ test("succès : renvoie la référence Campay", async () => {
 
 test("erreur réseau : convertie en 502 CAMPAY_ERROR", async () => {
   withdrawHandler = () => { throw new TypeError("fetch failed"); };
-  await assert.rejects(campayPayout(params, "test"), (err: any) =>
+  await assert.rejects(campayPayout(params, "test"), (err: unknown) =>
     err instanceof AppError && err.statusCode === 502 && err.code === "CAMPAY_ERROR");
 });
 
 test("refus Campay (HTTP non-2xx) : AppError d'origine propagée", async () => {
   withdrawHandler = () => new Response("nope", { status: 400 });
-  await assert.rejects(campayPayout(params, "test"), (err: any) =>
+  await assert.rejects(campayPayout(params, "test"), (err: unknown) =>
     err instanceof AppError && err.statusCode === 502 && err.code === "CAMPAY_WITHDRAW_ERROR");
 });
 
 test("montant sous le minimum opérateur : 400 AMOUNT_TOO_LOW, aucun appel Campay", async () => {
   withdrawHandler = () => { throw new Error("ne doit pas être appelé"); };
-  await assert.rejects(campayPayout({ ...params, amount: 5 }, "test"), (err: any) =>
+  await assert.rejects(campayPayout({ ...params, amount: 5 }, "test"), (err: unknown) =>
     err instanceof AppError && err.statusCode === 400 && err.code === "AMOUNT_TOO_LOW");
   assert.equal(calls.length, 0);
 });

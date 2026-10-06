@@ -75,12 +75,9 @@ export async function resolvePromotion(params: {
   }
 
   // Calculer la réduction
-  let discount = 0;
-  if (promo.type === "percent") {
-    discount = Math.round(orderTotal * Number(promo.value) / 100);
-  } else {
-    discount = Math.min(Number(promo.value), orderTotal);
-  }
+  const discount = promo.type === "percent"
+    ? Math.round(orderTotal * Number(promo.value) / 100)
+    : Math.min(Number(promo.value), orderTotal);
 
   return {
     promotion_id: promo.id,
